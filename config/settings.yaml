@@ -12,19 +12,27 @@ embedding:
   dimensions: 1536
 
 vector_store:
-  provider: chroma
-  persist_directory: data/db/chroma
+  backend: chroma
+  persist_path: data/db/chroma
   collection: default
 
 retrieval:
-  top_k: 5
+  sparse_backend: bm25
+  fusion_algorithm: rrf
+  top_k_dense: 20
+  top_k_sparse: 20
+  top_k_final: 5
 
 rerank:
   enabled: false
-  provider: none
+  backend: none
+  model: ""
+  top_m: 30
 
 evaluation:
   enabled: false
+  backends:
+    - custom_metrics
 
 observability:
   log_path: logs/app.log

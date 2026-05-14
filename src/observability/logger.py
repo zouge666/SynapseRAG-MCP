@@ -1,1 +1,16 @@
-"""Structured logging placeholder."""
+import logging
+import sys
+
+
+def get_logger(name: str) -> logging.Logger:
+    logger = logging.getLogger(name)
+    if logger.handlers:
+        return logger
+
+    handler = logging.StreamHandler(sys.stderr)
+    formatter = logging.Formatter("%(levelname)s %(name)s: %(message)s")
+    handler.setFormatter(formatter)
+    logger.addHandler(handler)
+    logger.setLevel(logging.INFO)
+    logger.propagate = False
+    return logger

@@ -1,1 +1,1 @@
-# Runtime dependencies are introduced incrementally by DEV_SPEC tasks.
+PyYAML>=6.0

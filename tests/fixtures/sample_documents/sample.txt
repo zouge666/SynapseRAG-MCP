@@ -1,0 +1,1 @@
+This tiny placeholder document keeps the sample fixture directory visible until real ingestion fixtures are added.
