@@ -15,8 +15,10 @@ class FakeLLM(BaseLLM):
 @pytest.fixture(autouse=True)
 def reset_factory() -> None:
     LLMFactory.unregister_provider("fake")
+    LLMFactory.unregister_provider("openai")
     yield
     LLMFactory.unregister_provider("fake")
+    LLMFactory.unregister_provider("openai")
 
 
 def test_factory_creates_registered_provider_from_llm_settings() -> None:
