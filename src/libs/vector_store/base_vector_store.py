@@ -1,0 +1,1 @@
+"""Base vector store placeholder."""

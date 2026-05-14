@@ -1,0 +1,1 @@
+"""Document summary tool placeholder."""

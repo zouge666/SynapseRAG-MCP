@@ -1,0 +1,1 @@
+"""Dashboard evaluation panel placeholder."""

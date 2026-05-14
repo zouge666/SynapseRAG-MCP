@@ -1,0 +1,1 @@
+"""Base vision LLM placeholder."""

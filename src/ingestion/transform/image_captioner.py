@@ -1,0 +1,1 @@
+"""Image captioner placeholder."""

@@ -1,0 +1,1 @@
+Rank the candidate chunks by relevance to the query and return the selected ids in order.

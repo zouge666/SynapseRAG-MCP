@@ -1,0 +1,1 @@
+"""Dashboard startup script placeholder."""

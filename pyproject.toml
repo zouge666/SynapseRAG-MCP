@@ -1,0 +1,13 @@
+[project]
+name = "synapserag-mcp"
+version = "0.1.0"
+description = "A modular RAG MCP server with pluggable ingestion, retrieval, and observability layers."
+requires-python = ">=3.10"
+dependencies = []
+
+[tool.setuptools.packages.find]
+where = ["src"]
+
+[tool.pytest.ini_options]
+pythonpath = ["src"]
+testpaths = ["tests"]

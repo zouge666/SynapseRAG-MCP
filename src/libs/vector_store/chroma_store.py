@@ -1,0 +1,1 @@
+"""Chroma vector store placeholder."""

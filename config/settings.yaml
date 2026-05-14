@@ -1,0 +1,31 @@
+app:
+  name: synapserag-mcp
+  environment: local
+
+llm:
+  provider: openai
+  model: gpt-4o
+
+embedding:
+  provider: openai
+  model: text-embedding-3-small
+  dimensions: 1536
+
+vector_store:
+  provider: chroma
+  persist_directory: data/db/chroma
+  collection: default
+
+retrieval:
+  top_k: 5
+
+rerank:
+  enabled: false
+  provider: none
+
+evaluation:
+  enabled: false
+
+observability:
+  log_path: logs/app.log
+  trace_path: logs/traces.jsonl

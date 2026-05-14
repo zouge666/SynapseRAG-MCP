@@ -1,0 +1,1 @@
+"""Multimodal response assembler placeholder."""

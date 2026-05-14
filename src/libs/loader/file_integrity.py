@@ -1,0 +1,1 @@
+"""File integrity checker placeholder."""

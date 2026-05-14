@@ -1,0 +1,1 @@
+"""Document lifecycle manager placeholder."""

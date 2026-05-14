@@ -1,0 +1,1 @@
+"""Fixed-length splitter placeholder."""
