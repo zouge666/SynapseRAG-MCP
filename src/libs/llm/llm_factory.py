@@ -49,7 +49,7 @@ class LLMFactory:
 
     @classmethod
     def create_vision_llm(cls, settings: Settings | LLMSettings) -> BaseVisionLLM:
-        llm_settings = settings.llm if isinstance(settings, Settings) else settings
+        llm_settings = settings.vision_llm or settings.llm if isinstance(settings, Settings) else settings
         key = cls._normalize_provider(llm_settings.provider)
         builder = cls._vision_providers.get(key)
         if builder is None:
@@ -87,4 +87,7 @@ class LLMFactory:
 
     @staticmethod
     def _load_builtin_vision_provider(provider: str) -> None:
-        return None
+        if provider == "azure":
+            from libs.llm.azure_vision_llm import AzureVisionLLM
+
+            LLMFactory.register_vision_provider("azure", AzureVisionLLM)

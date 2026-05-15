@@ -26,6 +26,7 @@ class LLMSettings:
     api_version: str = ""
     deployment_name: str = ""
     base_url: str = ""
+    max_image_size: int = 2048
 
 
 @dataclass(frozen=True)
@@ -86,6 +87,7 @@ class Settings:
     rerank: RerankSettings
     evaluation: EvaluationSettings
     observability: ObservabilitySettings
+    vision_llm: LLMSettings | None = None
 
 
 def load_settings(path: str = "config/settings.yaml") -> Settings:
@@ -124,6 +126,18 @@ def validate_settings(settings: Settings) -> None:
     if missing:
         raise SettingsError(f"missing required setting: {missing[0]}")
 
+    if settings.vision_llm is not None:
+        vision_missing = [
+            path
+            for path, value in {
+                "vision_llm.provider": settings.vision_llm.provider,
+                "vision_llm.model": settings.vision_llm.model,
+            }.items()
+            if value in (None, "")
+        ]
+        if vision_missing:
+            raise SettingsError(f"missing required setting: {vision_missing[0]}")
+
     positive_ints = {
         "retrieval.top_k_dense": settings.retrieval.top_k_dense,
         "retrieval.top_k_sparse": settings.retrieval.top_k_sparse,
@@ -133,6 +147,11 @@ def validate_settings(settings: Settings) -> None:
     for path, value in positive_ints.items():
         if not isinstance(value, int) or value <= 0:
             raise SettingsError(f"{path} must be a positive integer")
+
+    if settings.llm.max_image_size <= 0:
+        raise SettingsError("llm.max_image_size must be a positive integer")
+    if settings.vision_llm is not None and settings.vision_llm.max_image_size <= 0:
+        raise SettingsError("vision_llm.max_image_size must be a positive integer")
 
 
 def _parse_settings(raw: dict[str, Any]) -> Settings:
@@ -144,6 +163,9 @@ def _parse_settings(raw: dict[str, Any]) -> Settings:
     rerank = _section(raw, "rerank")
     evaluation = _section(raw, "evaluation")
     observability = _section(raw, "observability")
+    vision_llm = raw.get("vision_llm")
+    if vision_llm is not None and not isinstance(vision_llm, dict):
+        raise SettingsError("vision_llm must be a mapping")
 
     return Settings(
         app=AppSettings(
@@ -158,6 +180,7 @@ def _parse_settings(raw: dict[str, Any]) -> Settings:
             api_version=_text(llm, "api_version", ""),
             deployment_name=_text(llm, "deployment_name", ""),
             base_url=_text(llm, "base_url", ""),
+            max_image_size=_integer(llm, "max_image_size", 2048),
         ),
         embedding=EmbeddingSettings(
             provider=_text(embedding, "provider"),
@@ -195,6 +218,22 @@ def _parse_settings(raw: dict[str, Any]) -> Settings:
             log_path=_text(observability, "log_path"),
             trace_path=_text(observability, "trace_path"),
         ),
+        vision_llm=_parse_optional_llm_settings(vision_llm),
+    )
+
+
+def _parse_optional_llm_settings(section: dict[str, Any] | None) -> LLMSettings | None:
+    if section is None:
+        return None
+    return LLMSettings(
+        provider=_text(section, "provider"),
+        model=_text(section, "model"),
+        api_key=_text(section, "api_key", ""),
+        azure_endpoint=_text(section, "azure_endpoint", ""),
+        api_version=_text(section, "api_version", ""),
+        deployment_name=_text(section, "deployment_name", ""),
+        base_url=_text(section, "base_url", ""),
+        max_image_size=_integer(section, "max_image_size", 2048),
     )
 
 
