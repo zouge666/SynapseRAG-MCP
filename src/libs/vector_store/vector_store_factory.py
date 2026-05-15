@@ -28,6 +28,9 @@ class VectorStoreFactory:
         key = cls._normalize_provider(vector_store_settings.backend)
         builder = cls._providers.get(key)
         if builder is None:
+            cls._load_builtin_provider(key)
+            builder = cls._providers.get(key)
+        if builder is None:
             raise ValueError(f"unsupported vector store backend: {vector_store_settings.backend}")
         return builder(vector_store_settings)
 
@@ -37,3 +40,10 @@ class VectorStoreFactory:
         if not key:
             raise ValueError("vector_store.backend is required")
         return key
+
+    @staticmethod
+    def _load_builtin_provider(provider: str) -> None:
+        if provider == "chroma":
+            from libs.vector_store.chroma_store import ChromaStore
+
+            VectorStoreFactory.register_provider("chroma", ChromaStore)
