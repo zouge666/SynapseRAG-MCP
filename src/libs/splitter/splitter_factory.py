@@ -28,6 +28,9 @@ class SplitterFactory:
         key = cls._normalize_provider(provider)
         builder = cls._providers.get(key)
         if builder is None:
+            cls._load_builtin_provider(key)
+            builder = cls._providers.get(key)
+        if builder is None:
             raise ValueError(f"unsupported splitter provider: {provider}")
         return builder(splitter_settings)
 
@@ -53,3 +56,10 @@ class SplitterFactory:
         if not key:
             raise ValueError("splitter.provider is required")
         return key
+
+    @staticmethod
+    def _load_builtin_provider(provider: str) -> None:
+        if provider == "recursive":
+            from libs.splitter.recursive_splitter import RecursiveSplitter
+
+            SplitterFactory.register_provider("recursive", RecursiveSplitter)
