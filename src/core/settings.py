@@ -49,6 +49,13 @@ class VectorStoreSettings:
 
 
 @dataclass(frozen=True)
+class SplitterSettings:
+    provider: str = "recursive"
+    chunk_size: int = 1000
+    chunk_overlap: int = 200
+
+
+@dataclass(frozen=True)
 class RetrievalSettings:
     sparse_backend: str
     fusion_algorithm: str
@@ -83,6 +90,7 @@ class Settings:
     llm: LLMSettings
     embedding: EmbeddingSettings
     vector_store: VectorStoreSettings
+    splitter: SplitterSettings
     retrieval: RetrievalSettings
     rerank: RerankSettings
     evaluation: EvaluationSettings
@@ -115,6 +123,7 @@ def validate_settings(settings: Settings) -> None:
         "embedding.model": settings.embedding.model,
         "vector_store.backend": settings.vector_store.backend,
         "vector_store.persist_path": settings.vector_store.persist_path,
+        "splitter.provider": settings.splitter.provider,
         "retrieval.sparse_backend": settings.retrieval.sparse_backend,
         "retrieval.fusion_algorithm": settings.retrieval.fusion_algorithm,
         "rerank.backend": settings.rerank.backend,
@@ -142,11 +151,16 @@ def validate_settings(settings: Settings) -> None:
         "retrieval.top_k_dense": settings.retrieval.top_k_dense,
         "retrieval.top_k_sparse": settings.retrieval.top_k_sparse,
         "retrieval.top_k_final": settings.retrieval.top_k_final,
+        "splitter.chunk_size": settings.splitter.chunk_size,
     }
 
     for path, value in positive_ints.items():
         if not isinstance(value, int) or value <= 0:
             raise SettingsError(f"{path} must be a positive integer")
+    if not isinstance(settings.splitter.chunk_overlap, int) or settings.splitter.chunk_overlap < 0:
+        raise SettingsError("splitter.chunk_overlap must be a non-negative integer")
+    if settings.splitter.chunk_overlap >= settings.splitter.chunk_size:
+        raise SettingsError("splitter.chunk_overlap must be smaller than splitter.chunk_size")
 
     if settings.llm.max_image_size <= 0:
         raise SettingsError("llm.max_image_size must be a positive integer")
@@ -159,6 +173,9 @@ def _parse_settings(raw: dict[str, Any]) -> Settings:
     llm = _section(raw, "llm")
     embedding = _section(raw, "embedding")
     vector_store = _section(raw, "vector_store")
+    splitter = raw.get("splitter", {})
+    if not isinstance(splitter, dict):
+        raise SettingsError("splitter must be a mapping")
     retrieval = _section(raw, "retrieval")
     rerank = _section(raw, "rerank")
     evaluation = _section(raw, "evaluation")
@@ -196,6 +213,11 @@ def _parse_settings(raw: dict[str, Any]) -> Settings:
             backend=_text(vector_store, "backend", _text(vector_store, "provider")),
             persist_path=_text(vector_store, "persist_path", _text(vector_store, "persist_directory")),
             collection=_text(vector_store, "collection", "default"),
+        ),
+        splitter=SplitterSettings(
+            provider=_text(splitter, "provider", _text(splitter, "backend", "recursive")),
+            chunk_size=_integer(splitter, "chunk_size", 1000),
+            chunk_overlap=_integer(splitter, "chunk_overlap", _integer(splitter, "overlap", 200)),
         ),
         retrieval=RetrievalSettings(
             sparse_backend=_text(retrieval, "sparse_backend", "bm25"),

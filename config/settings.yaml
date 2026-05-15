@@ -16,6 +16,11 @@ vector_store:
   persist_path: data/db/chroma
   collection: default
 
+splitter:
+  provider: recursive
+  chunk_size: 1000
+  chunk_overlap: 200
+
 retrieval:
   sparse_backend: bm25
   fusion_algorithm: rrf

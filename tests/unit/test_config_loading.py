@@ -13,6 +13,8 @@ def test_load_settings_reads_default_config() -> None:
     assert settings.app.name == "synapserag-mcp"
     assert settings.embedding.provider == "openai"
     assert settings.vector_store.backend == "chroma"
+    assert settings.splitter.provider == "recursive"
+    assert settings.splitter.chunk_size == 1000
     assert settings.retrieval.top_k_final == 5
 
 
