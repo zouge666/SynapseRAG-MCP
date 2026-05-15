@@ -13,8 +13,10 @@ class FakeEmbedding(BaseEmbedding):
 @pytest.fixture(autouse=True)
 def reset_factory() -> None:
     EmbeddingFactory.unregister_provider("fake")
+    EmbeddingFactory.unregister_provider("openai")
     yield
     EmbeddingFactory.unregister_provider("fake")
+    EmbeddingFactory.unregister_provider("openai")
 
 
 def test_factory_creates_registered_provider_from_embedding_settings() -> None:

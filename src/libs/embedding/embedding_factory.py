@@ -28,6 +28,9 @@ class EmbeddingFactory:
         key = cls._normalize_provider(embedding_settings.provider)
         builder = cls._providers.get(key)
         if builder is None:
+            cls._load_builtin_provider(key)
+            builder = cls._providers.get(key)
+        if builder is None:
             raise ValueError(f"unsupported embedding provider: {embedding_settings.provider}")
         return builder(embedding_settings)
 
@@ -37,3 +40,14 @@ class EmbeddingFactory:
         if not key:
             raise ValueError("embedding.provider is required")
         return key
+
+    @staticmethod
+    def _load_builtin_provider(provider: str) -> None:
+        if provider == "openai":
+            from libs.embedding.openai_embedding import OpenAIEmbedding
+
+            EmbeddingFactory.register_provider("openai", OpenAIEmbedding)
+        elif provider == "azure":
+            from libs.embedding.azure_embedding import AzureOpenAIEmbedding
+
+            EmbeddingFactory.register_provider("azure", AzureOpenAIEmbedding)
