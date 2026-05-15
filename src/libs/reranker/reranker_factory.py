@@ -48,3 +48,7 @@ class RerankerFactory:
             from libs.reranker.llm_reranker import LLMReranker
 
             RerankerFactory.register_provider("llm", LLMReranker)
+        elif provider == "cross_encoder":
+            from libs.reranker.cross_encoder_reranker import CrossEncoderReranker
+
+            RerankerFactory.register_provider("cross_encoder", CrossEncoderReranker)
