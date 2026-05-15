@@ -4,13 +4,16 @@ from collections.abc import Callable
 
 from core.settings import LLMSettings, Settings
 from libs.llm.base_llm import BaseLLM
+from libs.llm.base_vision_llm import BaseVisionLLM
 
 
 LLMBuilder = Callable[[LLMSettings], BaseLLM]
+VisionLLMBuilder = Callable[[LLMSettings], BaseVisionLLM]
 
 
 class LLMFactory:
     _providers: dict[str, LLMBuilder] = {}
+    _vision_providers: dict[str, VisionLLMBuilder] = {}
 
     @classmethod
     def register_provider(cls, provider: str, builder: LLMBuilder) -> None:
@@ -23,6 +26,16 @@ class LLMFactory:
         cls._providers.pop(key, None)
 
     @classmethod
+    def register_vision_provider(cls, provider: str, builder: VisionLLMBuilder) -> None:
+        key = cls._normalize_provider(provider)
+        cls._vision_providers[key] = builder
+
+    @classmethod
+    def unregister_vision_provider(cls, provider: str) -> None:
+        key = cls._normalize_provider(provider)
+        cls._vision_providers.pop(key, None)
+
+    @classmethod
     def create(cls, settings: Settings | LLMSettings) -> BaseLLM:
         llm_settings = settings.llm if isinstance(settings, Settings) else settings
         key = cls._normalize_provider(llm_settings.provider)
@@ -32,6 +45,18 @@ class LLMFactory:
             builder = cls._providers.get(key)
         if builder is None:
             raise ValueError(f"unsupported LLM provider: {llm_settings.provider}")
+        return builder(llm_settings)
+
+    @classmethod
+    def create_vision_llm(cls, settings: Settings | LLMSettings) -> BaseVisionLLM:
+        llm_settings = settings.llm if isinstance(settings, Settings) else settings
+        key = cls._normalize_provider(llm_settings.provider)
+        builder = cls._vision_providers.get(key)
+        if builder is None:
+            cls._load_builtin_vision_provider(key)
+            builder = cls._vision_providers.get(key)
+        if builder is None:
+            raise ValueError(f"unsupported vision LLM provider: {llm_settings.provider}")
         return builder(llm_settings)
 
     @staticmethod
@@ -59,3 +84,7 @@ class LLMFactory:
             from libs.llm.ollama_llm import OllamaLLM
 
             LLMFactory.register_provider("ollama", OllamaLLM)
+
+    @staticmethod
+    def _load_builtin_vision_provider(provider: str) -> None:
+        return None
