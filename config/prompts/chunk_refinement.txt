@@ -1,1 +1,3 @@
 Rewrite the chunk as a self-contained retrieval unit while preserving factual content.
+
+{text}

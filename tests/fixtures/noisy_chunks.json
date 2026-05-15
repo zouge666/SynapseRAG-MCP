@@ -1,0 +1,42 @@
+[
+  {
+    "id": "typical_noise_scenario",
+    "input": "Header: SynapseRAG Manual\n\nThis   section explains retrieval.\n\nPage 1 of 3\n\nFooter: Internal",
+    "expected": "This section explains retrieval."
+  },
+  {
+    "id": "ocr_errors",
+    "input": "The ﬁnal retrieval step re-\n ranks candidate chunks with ﬂexible scoring.",
+    "expected": "The final retrieval step reranks candidate chunks with flexible scoring."
+  },
+  {
+    "id": "page_header_footer",
+    "input": "Company Confidential\n\nPage 2\n\nImportant content remains.\n\nFooter: Draft",
+    "expected": "Important content remains."
+  },
+  {
+    "id": "excessive_whitespace",
+    "input": "Alpha      beta\n\n\n\nGamma\t\t delta",
+    "expected": "Alpha beta\n\nGamma delta"
+  },
+  {
+    "id": "format_markers",
+    "input": "<div>**Important** _retrieval_ content</div>\n-----",
+    "expected": "Important retrieval content"
+  },
+  {
+    "id": "clean_text",
+    "input": "Clean paragraph with stable facts.",
+    "expected": "Clean paragraph with stable facts."
+  },
+  {
+    "id": "code_blocks",
+    "input": "Intro text\n\n```python\nvalue   = 1\nprint(value)\n```\n\nPage 4",
+    "expected": "Intro text\n\n```python\nvalue   = 1\nprint(value)\n```"
+  },
+  {
+    "id": "mixed_noise",
+    "input": "<!-- hidden -->\n# **Architecture**\n\nHeader: draft\n\nDense   retrieval uses vectors.\n\n===\n\nFooter: done",
+    "expected": "# Architecture\n\nDense retrieval uses vectors."
+  }
+]

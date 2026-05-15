@@ -56,6 +56,17 @@ class SplitterSettings:
 
 
 @dataclass(frozen=True)
+class ChunkRefinerSettings:
+    use_llm: bool = False
+    prompt_path: str = "config/prompts/chunk_refinement.txt"
+
+
+@dataclass(frozen=True)
+class IngestionSettings:
+    chunk_refiner: ChunkRefinerSettings = field(default_factory=ChunkRefinerSettings)
+
+
+@dataclass(frozen=True)
 class RetrievalSettings:
     sparse_backend: str
     fusion_algorithm: str
@@ -91,6 +102,7 @@ class Settings:
     embedding: EmbeddingSettings
     vector_store: VectorStoreSettings
     splitter: SplitterSettings
+    ingestion: IngestionSettings
     retrieval: RetrievalSettings
     rerank: RerankSettings
     evaluation: EvaluationSettings
@@ -176,6 +188,9 @@ def _parse_settings(raw: dict[str, Any]) -> Settings:
     splitter = raw.get("splitter", {})
     if not isinstance(splitter, dict):
         raise SettingsError("splitter must be a mapping")
+    ingestion = raw.get("ingestion", {})
+    if not isinstance(ingestion, dict):
+        raise SettingsError("ingestion must be a mapping")
     retrieval = _section(raw, "retrieval")
     rerank = _section(raw, "rerank")
     evaluation = _section(raw, "evaluation")
@@ -219,6 +234,7 @@ def _parse_settings(raw: dict[str, Any]) -> Settings:
             chunk_size=_integer(splitter, "chunk_size", 1000),
             chunk_overlap=_integer(splitter, "chunk_overlap", _integer(splitter, "overlap", 200)),
         ),
+        ingestion=_parse_ingestion_settings(ingestion),
         retrieval=RetrievalSettings(
             sparse_backend=_text(retrieval, "sparse_backend", "bm25"),
             fusion_algorithm=_text(retrieval, "fusion_algorithm", "rrf"),
@@ -256,6 +272,18 @@ def _parse_optional_llm_settings(section: dict[str, Any] | None) -> LLMSettings 
         deployment_name=_text(section, "deployment_name", ""),
         base_url=_text(section, "base_url", ""),
         max_image_size=_integer(section, "max_image_size", 2048),
+    )
+
+
+def _parse_ingestion_settings(section: dict[str, Any]) -> IngestionSettings:
+    chunk_refiner = section.get("chunk_refiner", {})
+    if not isinstance(chunk_refiner, dict):
+        raise SettingsError("ingestion.chunk_refiner must be a mapping")
+    return IngestionSettings(
+        chunk_refiner=ChunkRefinerSettings(
+            use_llm=_boolean(chunk_refiner, "use_llm", False),
+            prompt_path=_text(chunk_refiner, "prompt_path", "config/prompts/chunk_refinement.txt"),
+        )
     )
 
 

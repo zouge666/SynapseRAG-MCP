@@ -21,6 +21,11 @@ splitter:
   chunk_size: 1000
   chunk_overlap: 200
 
+ingestion:
+  chunk_refiner:
+    use_llm: false
+    prompt_path: config/prompts/chunk_refinement.txt
+
 retrieval:
   sparse_backend: bm25
   fusion_algorithm: rrf
