@@ -62,8 +62,14 @@ class ChunkRefinerSettings:
 
 
 @dataclass(frozen=True)
+class MetadataEnricherSettings:
+    use_llm: bool = False
+
+
+@dataclass(frozen=True)
 class IngestionSettings:
     chunk_refiner: ChunkRefinerSettings = field(default_factory=ChunkRefinerSettings)
+    metadata_enricher: MetadataEnricherSettings = field(default_factory=MetadataEnricherSettings)
 
 
 @dataclass(frozen=True)
@@ -279,11 +285,17 @@ def _parse_ingestion_settings(section: dict[str, Any]) -> IngestionSettings:
     chunk_refiner = section.get("chunk_refiner", {})
     if not isinstance(chunk_refiner, dict):
         raise SettingsError("ingestion.chunk_refiner must be a mapping")
+    metadata_enricher = section.get("metadata_enricher", {})
+    if not isinstance(metadata_enricher, dict):
+        raise SettingsError("ingestion.metadata_enricher must be a mapping")
     return IngestionSettings(
         chunk_refiner=ChunkRefinerSettings(
             use_llm=_boolean(chunk_refiner, "use_llm", False),
             prompt_path=_text(chunk_refiner, "prompt_path", "config/prompts/chunk_refinement.txt"),
-        )
+        ),
+        metadata_enricher=MetadataEnricherSettings(
+            use_llm=_boolean(metadata_enricher, "use_llm", False),
+        ),
     )
 
 

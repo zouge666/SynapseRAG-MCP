@@ -25,6 +25,8 @@ ingestion:
   chunk_refiner:
     use_llm: false
     prompt_path: config/prompts/chunk_refinement.txt
+  metadata_enricher:
+    use_llm: false
 
 retrieval:
   sparse_backend: bm25
