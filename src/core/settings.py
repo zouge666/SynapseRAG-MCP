@@ -67,9 +67,16 @@ class MetadataEnricherSettings:
 
 
 @dataclass(frozen=True)
+class ImageCaptionerSettings:
+    enabled: bool = False
+    prompt_path: str = "config/prompts/image_captioning.txt"
+
+
+@dataclass(frozen=True)
 class IngestionSettings:
     chunk_refiner: ChunkRefinerSettings = field(default_factory=ChunkRefinerSettings)
     metadata_enricher: MetadataEnricherSettings = field(default_factory=MetadataEnricherSettings)
+    image_captioner: ImageCaptionerSettings = field(default_factory=ImageCaptionerSettings)
 
 
 @dataclass(frozen=True)
@@ -288,6 +295,9 @@ def _parse_ingestion_settings(section: dict[str, Any]) -> IngestionSettings:
     metadata_enricher = section.get("metadata_enricher", {})
     if not isinstance(metadata_enricher, dict):
         raise SettingsError("ingestion.metadata_enricher must be a mapping")
+    image_captioner = section.get("image_captioner", {})
+    if not isinstance(image_captioner, dict):
+        raise SettingsError("ingestion.image_captioner must be a mapping")
     return IngestionSettings(
         chunk_refiner=ChunkRefinerSettings(
             use_llm=_boolean(chunk_refiner, "use_llm", False),
@@ -295,6 +305,10 @@ def _parse_ingestion_settings(section: dict[str, Any]) -> IngestionSettings:
         ),
         metadata_enricher=MetadataEnricherSettings(
             use_llm=_boolean(metadata_enricher, "use_llm", False),
+        ),
+        image_captioner=ImageCaptionerSettings(
+            enabled=_boolean(image_captioner, "enabled", False),
+            prompt_path=_text(image_captioner, "prompt_path", "config/prompts/image_captioning.txt"),
         ),
     )
 

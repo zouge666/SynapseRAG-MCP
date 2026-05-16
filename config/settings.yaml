@@ -27,6 +27,9 @@ ingestion:
     prompt_path: config/prompts/chunk_refinement.txt
   metadata_enricher:
     use_llm: false
+  image_captioner:
+    enabled: false
+    prompt_path: config/prompts/image_captioning.txt
 
 retrieval:
   sparse_backend: bm25
