@@ -52,6 +52,16 @@ class ChromaStore(BaseVectorStore):
             results.append(VectorSearchResult(id=record.id, score=score, text=record.text, metadata=dict(record.metadata)))
         return sorted(results, key=lambda result: (-result.score, result.id))[:top_k]
 
+    def get_by_ids(self, ids: list[str], trace: object | None = None) -> list[VectorRecord]:
+        if not isinstance(ids, list) or not all(isinstance(item, str) and item for item in ids):
+            raise ChromaStoreError("chroma validation error: ids must be a list of non-empty strings")
+        records = []
+        for record_id in ids:
+            record = self.records.get(record_id)
+            if record is not None:
+                records.append(VectorRecord(id=record.id, vector=list(record.vector), text=record.text, metadata=dict(record.metadata)))
+        return records
+
     def _load(self) -> dict[str, VectorRecord]:
         if not self.store_path.exists():
             return {}

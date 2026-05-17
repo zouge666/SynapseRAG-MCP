@@ -1,4 +1,4 @@
-from core.types import Chunk, ChunkRecord, CoreTypeError, Document, image_placeholder
+from core.types import Chunk, ChunkRecord, CoreTypeError, Document, RetrievalResult, image_placeholder
 
 
 __all__ = [
@@ -6,5 +6,6 @@ __all__ = [
     "ChunkRecord",
     "CoreTypeError",
     "Document",
+    "RetrievalResult",
     "image_placeholder",
 ]

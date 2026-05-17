@@ -40,3 +40,7 @@ class BaseVectorStore(ABC):
         trace: object | None = None,
     ) -> list[VectorSearchResult]:
         raise NotImplementedError
+
+    @abstractmethod
+    def get_by_ids(self, ids: list[str], trace: object | None = None) -> list[VectorRecord]:
+        raise NotImplementedError

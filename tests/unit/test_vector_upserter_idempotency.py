@@ -30,6 +30,9 @@ class FakeVectorStore(BaseVectorStore):
     ) -> list[VectorSearchResult]:
         return []
 
+    def get_by_ids(self, ids: list[str], trace: object | None = None) -> list[VectorRecord]:
+        return [self.records[record_id] for record_id in ids if record_id in self.records]
+
 
 def record(text: str = "Alpha text", chunk_id: str = "chunk-1", chunk_index: int = 0, source_path: str = "docs/sample.pdf") -> ChunkRecord:
     return ChunkRecord(

@@ -31,6 +31,9 @@ class FakeVectorStore(BaseVectorStore):
             results.append(VectorSearchResult(id=record.id, score=score, text=record.text, metadata=record.metadata))
         return sorted(results, key=lambda result: result.score, reverse=True)[:top_k]
 
+    def get_by_ids(self, ids: list[str], trace: object | None = None) -> list[VectorRecord]:
+        return [self.records[record_id] for record_id in ids if record_id in self.records]
+
 
 @pytest.fixture(autouse=True)
 def reset_factory() -> None:
@@ -58,6 +61,7 @@ def test_vector_store_contract_upsert_and_query_shape() -> None:
     assert [result.id for result in results] == ["a", "b"]
     assert results[0].text == "alpha"
     assert results[0].metadata == {"collection": "docs"}
+    assert [record.id for record in store.get_by_ids(["c", "missing", "a"])] == ["c", "a"]
 
 
 def test_factory_creates_registered_backend_from_vector_store_settings() -> None:

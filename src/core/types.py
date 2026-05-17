@@ -136,6 +136,47 @@ class ChunkRecord:
         return cls.from_dict(_json_loads("ChunkRecord", data))
 
 
+@dataclass(frozen=True)
+class RetrievalResult:
+    chunk_id: str
+    score: float
+    text: str
+    metadata: Metadata = field(default_factory=dict)
+
+    def __post_init__(self) -> None:
+        _validate_id("RetrievalResult.chunk_id", self.chunk_id)
+        if not isinstance(self.score, int | float):
+            raise CoreTypeError("RetrievalResult.score must be a number")
+        _validate_text("RetrievalResult.text", self.text)
+        if not isinstance(self.metadata, dict):
+            raise CoreTypeError("metadata must be a mapping")
+
+    def to_dict(self) -> dict[str, Any]:
+        return {
+            "chunk_id": self.chunk_id,
+            "score": float(self.score),
+            "text": self.text,
+            "metadata": _json_copy(self.metadata),
+        }
+
+    @classmethod
+    def from_dict(cls, data: dict[str, Any]) -> RetrievalResult:
+        _validate_mapping("RetrievalResult", data)
+        return cls(
+            chunk_id=data.get("chunk_id"),
+            score=data.get("score"),
+            text=data.get("text"),
+            metadata=data.get("metadata", {}),
+        )
+
+    def to_json(self) -> str:
+        return json.dumps(self.to_dict(), ensure_ascii=False, sort_keys=True)
+
+    @classmethod
+    def from_json(cls, data: str) -> RetrievalResult:
+        return cls.from_dict(_json_loads("RetrievalResult", data))
+
+
 def _validate_mapping(name: str, value: Any) -> None:
     if not isinstance(value, dict):
         raise CoreTypeError(f"{name} must be a mapping")
