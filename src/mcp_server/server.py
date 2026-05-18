@@ -4,9 +4,7 @@ import json
 import sys
 from typing import Any, TextIO
 
-
-PROTOCOL_VERSION = "2025-06-18"
-SERVER_INFO = {"name": "synapserag-mcp", "version": "0.1.0"}
+from mcp_server.protocol_handler import ProtocolHandler
 
 
 class MCPServerError(ValueError):
@@ -14,8 +12,9 @@ class MCPServerError(ValueError):
 
 
 class MCPServer:
-    def __init__(self, stderr: TextIO | None = None) -> None:
+    def __init__(self, stderr: TextIO | None = None, handler: ProtocolHandler | None = None) -> None:
         self.stderr = stderr or sys.stderr
+        self.handler = handler or ProtocolHandler()
 
     def serve(self, stdin: TextIO | None = None, stdout: TextIO | None = None) -> int:
         active_stdin = stdin or sys.stdin
@@ -36,39 +35,20 @@ class MCPServer:
             request = json.loads(line)
         except json.JSONDecodeError as error:
             self._log(f"invalid json: {error.msg}")
-            return self._error(None, -32700, "Parse error")
+            return self.handler.error_response(None, -32700, "Parse error")
         return self.handle_request(request)
 
     def handle_request(self, request: Any) -> dict[str, Any] | None:
-        if not isinstance(request, dict):
-            return self._error(None, -32600, "Invalid Request")
-        request_id = request.get("id")
-        method = request.get("method")
-        if method == "notifications/initialized":
+        response = self.handler.handle_request(request)
+        method = request.get("method") if isinstance(request, dict) else None
+        if response is None and method == "notifications/initialized":
             self._log("client initialized")
-            return None
-        if not isinstance(method, str) or request.get("jsonrpc") != "2.0":
-            return self._error(request_id, -32600, "Invalid Request")
-        if method == "initialize":
+        elif isinstance(response, dict) and "error" in response:
+            error = response["error"]
+            self._log(f"jsonrpc error {error['code']}: {error['message']}")
+        elif method == "initialize":
             self._log("initialize handled")
-            return self._result(request_id, self._initialize_result(request.get("params", {})))
-        return self._error(request_id, -32601, "Method not found")
-
-    def _initialize_result(self, params: Any) -> dict[str, Any]:
-        requested = params.get("protocolVersion") if isinstance(params, dict) else None
-        protocol_version = requested if isinstance(requested, str) and requested else PROTOCOL_VERSION
-        return {
-            "protocolVersion": protocol_version,
-            "capabilities": {"tools": {}},
-            "serverInfo": dict(SERVER_INFO),
-        }
-
-    def _result(self, request_id: Any, result: dict[str, Any]) -> dict[str, Any]:
-        return {"jsonrpc": "2.0", "id": request_id, "result": result}
-
-    def _error(self, request_id: Any, code: int, message: str) -> dict[str, Any]:
-        self._log(f"jsonrpc error {code}: {message}")
-        return {"jsonrpc": "2.0", "id": request_id, "error": {"code": code, "message": message}}
+        return response
 
     def _log(self, message: str) -> None:
         print(message, file=self.stderr, flush=True)
