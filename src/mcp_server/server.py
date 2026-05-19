@@ -5,6 +5,7 @@ import sys
 from typing import Any, TextIO
 
 from mcp_server.protocol_handler import ProtocolHandler
+from mcp_server.tools import default_tools
 
 
 class MCPServerError(ValueError):
@@ -14,7 +15,7 @@ class MCPServerError(ValueError):
 class MCPServer:
     def __init__(self, stderr: TextIO | None = None, handler: ProtocolHandler | None = None) -> None:
         self.stderr = stderr or sys.stderr
-        self.handler = handler or ProtocolHandler()
+        self.handler = handler or ProtocolHandler(tools=default_tools())
 
     def serve(self, stdin: TextIO | None = None, stdout: TextIO | None = None) -> int:
         active_stdin = stdin or sys.stdin
