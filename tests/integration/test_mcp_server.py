@@ -8,6 +8,7 @@ from pathlib import Path
 from core import RetrievalResult
 from mcp_server.protocol_handler import ProtocolHandler
 from mcp_server.server import MCPServer
+from mcp_server.tools.list_collections import list_collections_tool_definition
 from mcp_server.tools.query_knowledge_hub import query_knowledge_hub_tool_definition
 
 
@@ -127,9 +128,11 @@ def test_mcp_server_tools_list_exposes_query_knowledge_hub() -> None:
     completed = run_server(json.dumps(request) + "\n")
 
     response = json.loads(completed.stdout.strip())
-    tools = response["result"]["tools"]
-    assert tools[0]["name"] == "query_knowledge_hub"
-    assert tools[0]["inputSchema"]["required"] == ["query"]
+    tools = {tool["name"]: tool for tool in response["result"]["tools"]}
+    assert "list_collections" in tools
+    assert "query_knowledge_hub" in tools
+    assert tools["list_collections"]["inputSchema"] == {"type": "object", "properties": {}}
+    assert tools["query_knowledge_hub"]["inputSchema"]["required"] == ["query"]
 
 
 def test_mcp_server_handle_request_directly() -> None:
@@ -170,3 +173,33 @@ def test_mcp_server_query_knowledge_hub_tool_call_returns_citations() -> None:
     assert tool_result["structuredContent"]["citations"][0]["page"] == 2
     assert tool_result["structuredContent"]["citations"][0]["chunk_id"] == "b"
     assert search.calls[0]["filters"] == {"collection": "docs"}
+
+
+def test_mcp_server_list_collections_tool_call_returns_document_stats(tmp_path: Path) -> None:
+    root = tmp_path / "documents"
+    (root / "docs").mkdir(parents=True)
+    (root / "notes").mkdir(parents=True)
+    (root / "docs" / "guide.md").write_text("alpha", encoding="utf-8")
+    (root / "notes" / "idea.txt").write_text("beta", encoding="utf-8")
+    tool = list_collections_tool_definition(root=root)
+    server = MCPServer(
+        stderr=StringIO(),
+        handler=ProtocolHandler(tools={tool.name: tool}),
+    )
+    request = {
+        "jsonrpc": "2.0",
+        "id": 11,
+        "method": "tools/call",
+        "params": {"name": "list_collections", "arguments": {}},
+    }
+    output = StringIO()
+
+    server.serve(stdin=StringIO(json.dumps(request) + "\n"), stdout=output)
+
+    response = json.loads(output.getvalue())
+    collections = response["result"]["structuredContent"]["collections"]
+    assert [collection["name"] for collection in collections] == ["docs", "notes"]
+    assert collections[0]["document_count"] == 1
+    assert collections[0]["documents"] == ["guide.md"]
+    assert collections[1]["document_count"] == 1
+    assert collections[1]["documents"] == ["idea.txt"]
