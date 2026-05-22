@@ -8,6 +8,7 @@ from pathlib import Path
 from core import RetrievalResult
 from mcp_server.protocol_handler import ProtocolHandler
 from mcp_server.server import MCPServer
+from mcp_server.tools.get_document_summary import get_document_summary_tool_definition
 from mcp_server.tools.list_collections import list_collections_tool_definition
 from mcp_server.tools.query_knowledge_hub import query_knowledge_hub_tool_definition
 
@@ -129,8 +130,10 @@ def test_mcp_server_tools_list_exposes_query_knowledge_hub() -> None:
 
     response = json.loads(completed.stdout.strip())
     tools = {tool["name"]: tool for tool in response["result"]["tools"]}
+    assert "get_document_summary" in tools
     assert "list_collections" in tools
     assert "query_knowledge_hub" in tools
+    assert tools["get_document_summary"]["inputSchema"]["required"] == ["doc_id"]
     assert tools["list_collections"]["inputSchema"] == {"type": "object", "properties": {}}
     assert tools["query_knowledge_hub"]["inputSchema"]["required"] == ["query"]
 
@@ -203,3 +206,50 @@ def test_mcp_server_list_collections_tool_call_returns_document_stats(tmp_path: 
     assert collections[0]["documents"] == ["guide.md"]
     assert collections[1]["document_count"] == 1
     assert collections[1]["documents"] == ["idea.txt"]
+
+
+def test_mcp_server_get_document_summary_tool_call_returns_metadata(tmp_path: Path) -> None:
+    root = tmp_path / "chroma"
+    root.mkdir(parents=True)
+    (root / "docs.json").write_text(
+        json.dumps(
+            {
+                "collection": "docs",
+                "records": [
+                    {
+                        "id": "vec-1",
+                        "vector": [1.0, 0.0],
+                        "text": "Alpha text",
+                        "metadata": {
+                            "source_path": "docs/alpha.pdf",
+                            "title": "Alpha",
+                            "summary": "Alpha summary.",
+                            "tags": ["alpha"],
+                            "chunk_id": "chunk-1",
+                        },
+                    }
+                ],
+            }
+        ),
+        encoding="utf-8",
+    )
+    tool = get_document_summary_tool_definition(persist_path=root)
+    server = MCPServer(
+        stderr=StringIO(),
+        handler=ProtocolHandler(tools={tool.name: tool}),
+    )
+    request = {
+        "jsonrpc": "2.0",
+        "id": 12,
+        "method": "tools/call",
+        "params": {"name": "get_document_summary", "arguments": {"doc_id": "alpha"}},
+    }
+    output = StringIO()
+
+    server.serve(stdin=StringIO(json.dumps(request) + "\n"), stdout=output)
+
+    response = json.loads(output.getvalue())
+    document = response["result"]["structuredContent"]["document"]
+    assert document["title"] == "Alpha"
+    assert document["summary"] == "Alpha summary."
+    assert document["tags"] == ["alpha"]
