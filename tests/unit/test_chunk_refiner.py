@@ -245,7 +245,7 @@ def test_rule_preserves_markdown_heading_structure() -> None:
 
 
 def test_trace_context_finish_serializes_state() -> None:
-    trace = TraceContext(metadata={"source_path": "docs/sample.pdf"})
+    trace = TraceContext(trace_type="ingestion", metadata={"source_path": "docs/sample.pdf"})
     trace.record_stage("chunk_refiner", {"count": 1})
 
     data = trace.finish()
