@@ -1,3 +1,4 @@
+import base64
 import json
 import os
 import subprocess
@@ -253,3 +254,51 @@ def test_mcp_server_get_document_summary_tool_call_returns_metadata(tmp_path: Pa
     assert document["title"] == "Alpha"
     assert document["summary"] == "Alpha summary."
     assert document["tags"] == ["alpha"]
+
+
+def test_mcp_server_query_knowledge_hub_tool_call_returns_image_content(tmp_path: Path) -> None:
+    image_path = tmp_path / "img-1.png"
+    image_bytes = b"\x89PNG\r\n\x1a\nimage"
+    image_path.write_bytes(image_bytes)
+    search = FakeSearch(
+        [
+            RetrievalResult(
+                chunk_id="chunk-with-image",
+                score=0.95,
+                text="Alpha [IMAGE: img-1] text",
+                metadata={
+                    "source_path": "docs/image.pdf",
+                    "image_refs": ["img-1"],
+                    "images": [{"id": "img-1", "path": str(image_path), "text_offset": 6, "text_length": 14}],
+                },
+            )
+        ]
+    )
+    reranker = FakeReranker()
+    tool = query_knowledge_hub_tool_definition(
+        settings={},
+        search_factory=lambda settings: search,
+        reranker_factory=lambda settings: reranker,
+    )
+    server = MCPServer(
+        stderr=StringIO(),
+        handler=ProtocolHandler(tools={tool.name: tool}),
+    )
+    request = {
+        "jsonrpc": "2.0",
+        "id": 13,
+        "method": "tools/call",
+        "params": {"name": "query_knowledge_hub", "arguments": {"query": "show image"}},
+    }
+    output = StringIO()
+
+    server.serve(stdin=StringIO(json.dumps(request) + "\n"), stdout=output)
+
+    response = json.loads(output.getvalue())
+    content = response["result"]["content"]
+    assert content[0]["type"] == "text"
+    assert content[1] == {
+        "type": "image",
+        "mimeType": "image/png",
+        "data": base64.b64encode(image_bytes).decode("ascii"),
+    }

@@ -5,6 +5,7 @@ from typing import Any
 
 from core import RetrievalResult
 from core.response.citation_generator import Citation, CitationGenerator
+from core.response.multimodal_assembler import MultimodalAssembler
 
 
 class ResponseBuilderError(ValueError):
@@ -12,8 +13,13 @@ class ResponseBuilderError(ValueError):
 
 
 class ResponseBuilder:
-    def __init__(self, citation_generator: CitationGenerator | None = None) -> None:
+    def __init__(
+        self,
+        citation_generator: CitationGenerator | None = None,
+        multimodal_assembler: MultimodalAssembler | None = None,
+    ) -> None:
         self.citation_generator = citation_generator or CitationGenerator()
+        self.multimodal_assembler = multimodal_assembler or MultimodalAssembler()
 
     def build(self, retrieval_results: list[RetrievalResult], query: str) -> dict[str, Any]:
         if not isinstance(query, str) or not query.strip():
@@ -23,9 +29,10 @@ class ResponseBuilder:
         citations = self.citation_generator.generate(retrieval_results)
         if not citations:
             answer = f"未找到与「{query}」相关的内容。"
-            return self._tool_result(answer, answer, [])
+            return self._tool_result(answer, answer, [], [])
         markdown = self._markdown(query, retrieval_results, citations)
-        return self._tool_result(markdown, markdown, [citation.to_dict() for citation in citations])
+        images = self.multimodal_assembler.assemble(retrieval_results)
+        return self._tool_result(markdown, markdown, [citation.to_dict() for citation in citations], images)
 
     def _markdown(self, query: str, results: list[RetrievalResult], citations: list[Citation]) -> str:
         lines = [f"找到 {len(results)} 个与「{query}」相关的片段：", ""]
@@ -48,8 +55,8 @@ class ResponseBuilder:
             return value
         return f"{value[: limit - 3]}..."
 
-    def _tool_result(self, text: str, answer: str, citations: list[dict[str, Any]]) -> dict[str, Any]:
+    def _tool_result(self, text: str, answer: str, citations: list[dict[str, Any]], images: list[dict[str, Any]]) -> dict[str, Any]:
         return {
-            "content": [{"type": "text", "text": text}],
+            "content": [{"type": "text", "text": text}, *images],
             "structuredContent": {"answer": answer, "citations": citations},
         }
