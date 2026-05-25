@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 from dataclasses import replace
+from time import perf_counter
 from typing import Any
 
 from core import RetrievalResult
@@ -26,17 +27,18 @@ class Reranker:
         if not isinstance(query, str) or not query.strip():
             raise RerankerError("query must be a non-empty string")
         self._validate_results(candidates)
+        start = perf_counter()
         if not candidates:
-            self._record(trace, {"count": 0, "fallback": False, "enabled": self._enabled(), "backend": self._backend_name()})
+            self._record(trace, {"count": 0, "fallback": False, "enabled": self._enabled(), "backend": self._backend_name()}, start)
             return []
         if not self._enabled():
             results = list(candidates)
-            self._record(trace, {"count": len(results), "fallback": False, "enabled": False, "backend": self._backend_name()})
+            self._record(trace, {"count": len(results), "fallback": False, "enabled": False, "backend": self._backend_name()}, start)
             return results
         try:
             ranked = self._backend().rerank(query, self._to_candidates(candidates), trace=trace)
             results = self._to_results(ranked, candidates)
-            self._record(trace, {"count": len(results), "fallback": False, "enabled": True, "backend": self._backend_name()})
+            self._record(trace, {"count": len(results), "fallback": False, "enabled": True, "backend": self._backend_name()}, start)
             return results
         except Exception as error:
             results = list(candidates)
@@ -49,6 +51,7 @@ class Reranker:
                     "backend": self._backend_name(),
                     "error": str(error),
                 },
+                start,
             )
             return results
 
@@ -105,6 +108,8 @@ class Reranker:
             return self.settings.get("rerank", self.settings)
         return getattr(self.settings, "rerank", self.settings)
 
-    def _record(self, trace: object | None, details: dict[str, Any]) -> None:
+    def _record(self, trace: object | None, details: dict[str, Any], start: float) -> None:
         if trace is not None and hasattr(trace, "record_stage"):
-            trace.record_stage("reranker", details)
+            duration_ms = round((perf_counter() - start) * 1000, 3)
+            trace.record_stage("rerank", {"method": "reranker", **details}, duration_ms=duration_ms)
+            trace.record_stage("reranker", details, duration_ms=duration_ms)

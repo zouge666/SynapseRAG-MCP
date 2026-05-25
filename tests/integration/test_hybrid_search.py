@@ -1,7 +1,7 @@
 import pytest
 
 from core import RetrievalResult
-from core.query_engine import HybridSearch, HybridSearchError, RRFusion
+from core.query_engine import HybridSearch, HybridSearchError, Reranker, RRFusion
 from core.query_engine.query_processor import ProcessedQuery
 from core.trace import TraceContext
 
@@ -92,6 +92,34 @@ def test_hybrid_search_applies_metadata_filters_after_fusion() -> None:
     results = search.search("metadata filters", top_k=5, filters={"collection": "docs", "doc_type": ["pdf", "markdown"]})
 
     assert [item.chunk_id for item in results] == ["a", "c"]
+
+
+def test_hybrid_search_and_reranker_record_query_trace_stages() -> None:
+    trace = TraceContext(trace_type="query")
+    search = HybridSearch(
+        {},
+        FakeQueryProcessor(keywords=["hybrid", "rag"]),
+        FakeDenseRetriever([result("a", 0.9), result("b", 0.8)]),
+        FakeSparseRetriever([result("b", 9.0), result("c", 8.0)]),
+        RRFusion(k=60),
+    )
+
+    results = search.search("Hybrid RAG", top_k=3, filters={"collection": "docs"}, trace=trace)
+    reranked = Reranker({"rerank": {"enabled": False, "backend": "none"}}).rerank("Hybrid RAG", results, trace=trace)
+    data = trace.finish("success")
+
+    assert reranked == results
+    stages = {stage["name"]: stage for stage in data["stages"]}
+    for name in ("query_processing", "dense_retrieval", "sparse_retrieval", "fusion", "rerank"):
+        assert name in stages
+        assert stages[name]["elapsed_ms"] >= 0
+        assert stages[name]["details"]["method"]
+    assert stages["query_processing"]["details"]["keyword_count"] == 2
+    assert stages["dense_retrieval"]["details"]["count"] == 2
+    assert stages["sparse_retrieval"]["details"]["count"] == 2
+    assert stages["fusion"]["details"]["count"] == 3
+    assert stages["rerank"]["details"]["enabled"] is False
+    assert data["trace_type"] == "query"
 
 
 def test_hybrid_search_degrades_when_dense_route_fails() -> None:
