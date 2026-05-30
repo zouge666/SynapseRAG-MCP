@@ -102,8 +102,8 @@ class IngestionPipeline:
             document = self._run_stage("image_store", lambda: self._store_document_images(document, collection, file_hash), active_trace, on_progress, 3, total)
             chunks = self._run_stage("split", lambda: self.chunker.split_document(document), active_trace, on_progress, 4, total)
             chunks = self._run_stage("transform", lambda: self._transform(chunks, active_trace), active_trace, on_progress, 5, total)
-            records = self._run_stage("encode", lambda: self.batch_processor.process(chunks, trace=active_trace), active_trace, on_progress, 6, total)
-            vector_ids = self._run_stage("store", lambda: self._store_records(records, active_trace), active_trace, on_progress, 7, total)
+            records = self._run_stage("encode", lambda: self.batch_processor.process(chunks, trace=active_trace), active_trace, on_progress, 6, total, trace_stage="embed")
+            vector_ids = self._run_stage("store", lambda: self._store_records(records, active_trace), active_trace, on_progress, 7, total, trace_stage="upsert")
             self.integrity_checker.mark_success(file_hash, path, file_size=file_size, chunk_count=len(records))
             active_trace.record_stage("pipeline", {"status": "success", "chunk_count": len(records), "image_count": self._image_count(document)})
             return IngestionResult(
@@ -131,6 +131,7 @@ class IngestionPipeline:
         on_progress: ProgressCallback | None,
         current: int,
         total: int,
+        trace_stage: str | None = None,
     ) -> Any:
         start = perf_counter()
         try:
@@ -138,8 +139,10 @@ class IngestionPipeline:
         except Exception as error:
             raise IngestionPipelineError(f"{stage} failed: {error}") from error
         duration_ms = round((perf_counter() - start) * 1000, 3)
-        details = self._stage_details(result)
+        details = self._stage_details(stage, result)
         trace.record_stage(stage, details, duration_ms=duration_ms)
+        if trace_stage is not None and trace_stage != stage:
+            trace.record_stage(trace_stage, self._stage_details(trace_stage, result), duration_ms=duration_ms)
         if on_progress is not None:
             on_progress(stage, current, total)
         return result
@@ -178,14 +181,50 @@ class IngestionPipeline:
         self.bm25_indexer.save()
         return vector_ids
 
-    def _stage_details(self, result: Any) -> dict[str, Any]:
+    def _stage_details(self, stage: str, result: Any) -> dict[str, Any]:
         if isinstance(result, list):
-            return {"count": len(result)}
-        if isinstance(result, Document):
-            return {"document_id": result.id, "image_count": self._image_count(result)}
-        if isinstance(result, str):
-            return {"value": result}
-        return {}
+            details = {"count": len(result)}
+        elif isinstance(result, Document):
+            details = {"document_id": result.id, "image_count": self._image_count(result)}
+        elif isinstance(result, str):
+            details = {"value": result}
+        else:
+            details = {}
+        method = self._stage_method(stage)
+        if method:
+            details["method"] = method
+        return details
+
+    def _stage_method(self, stage: str) -> str:
+        if stage == "integrity":
+            return self._method_name(self.integrity_checker)
+        if stage == "load":
+            return self._method_name(self.loader)
+        if stage == "image_store":
+            return self._method_name(self.image_storage)
+        if stage == "split":
+            return self._method_name(self.chunker)
+        if stage == "transform":
+            return "+".join(self._method_name(transform) for transform in self.transforms)
+        if stage == "encode" or stage == "embed":
+            return self._method_name(self.batch_processor)
+        if stage == "store" or stage == "upsert":
+            return self._method_name(self.vector_upserter)
+        return "ingestion_pipeline"
+
+    def _method_name(self, value: object) -> str:
+        name = type(value).__name__
+        parts: list[str] = []
+        current = ""
+        for index, char in enumerate(name):
+            if char.isupper() and index and (not name[index - 1].isupper() or (index + 1 < len(name) and name[index + 1].islower())):
+                parts.append(current)
+                current = char.lower()
+            else:
+                current += char.lower()
+        if current:
+            parts.append(current)
+        return "_".join(part for part in parts if part)
 
     def _image_count(self, document: Document) -> int:
         images = document.metadata.get("images", [])

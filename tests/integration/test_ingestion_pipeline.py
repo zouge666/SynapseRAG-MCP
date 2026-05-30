@@ -182,6 +182,17 @@ def test_pipeline_runs_full_ingestion_flow(tmp_path: Path) -> None:
     assert result.vector_ids == ["vec-chunk-1", "vec-chunk-2"]
     assert result.image_count == 1
     assert result.trace["status"] == "success"
+    assert result.trace["trace_type"] == "ingestion"
+    stages = {stage["name"]: stage for stage in result.trace["stages"]}
+    for name in ("load", "split", "transform", "embed", "upsert"):
+        assert name in stages
+        assert stages[name]["elapsed_ms"] >= 0
+        assert stages[name]["details"]["method"]
+    assert stages["load"]["details"]["document_id"] == "hash-1"
+    assert stages["split"]["details"]["count"] == 2
+    assert stages["transform"]["details"]["count"] == 2
+    assert stages["embed"]["details"]["count"] == 2
+    assert stages["upsert"]["details"]["count"] == 2
     assert progress == [
         ("integrity", 1, 7),
         ("load", 2, 7),
