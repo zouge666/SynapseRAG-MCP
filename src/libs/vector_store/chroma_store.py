@@ -62,6 +62,26 @@ class ChromaStore(BaseVectorStore):
                 records.append(VectorRecord(id=record.id, vector=list(record.vector), text=record.text, metadata=dict(record.metadata)))
         return records
 
+    def get_collection_stats(self) -> dict[str, Any]:
+        sources = set()
+        documents = set()
+        for record in self.records.values():
+            source = record.metadata.get("source_path") or record.metadata.get("source")
+            document = record.metadata.get("document_id") or record.metadata.get("doc_id") or record.metadata.get("doc_hash") or source
+            if isinstance(source, str) and source:
+                sources.add(source)
+            if isinstance(document, str) and document:
+                documents.add(document)
+        return {
+            "collection": self.collection,
+            "persist_path": str(self.persist_path),
+            "store_path": str(self.store_path),
+            "record_count": len(self.records),
+            "document_count": len(documents),
+            "source_count": len(sources),
+            "persisted": self.store_path.exists(),
+        }
+
     def _load(self) -> dict[str, VectorRecord]:
         if not self.store_path.exists():
             return {}

@@ -5,6 +5,7 @@ description = "A modular RAG MCP server with pluggable ingestion, retrieval, and
 requires-python = ">=3.10"
 dependencies = [
     "PyYAML>=6.0",
+    "streamlit>=1.36",
 ]
 
 [project.optional-dependencies]
