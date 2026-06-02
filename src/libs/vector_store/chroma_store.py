@@ -62,6 +62,26 @@ class ChromaStore(BaseVectorStore):
                 records.append(VectorRecord(id=record.id, vector=list(record.vector), text=record.text, metadata=dict(record.metadata)))
         return records
 
+    def get_by_metadata(self, filters: dict[str, Any] | None = None) -> list[VectorRecord]:
+        active_filters = filters or {}
+        if not isinstance(active_filters, dict):
+            raise ChromaStoreError("chroma validation error: filters must be object")
+        records = []
+        for record in self.records.values():
+            if self._matches_filters(record, active_filters):
+                records.append(VectorRecord(id=record.id, vector=list(record.vector), text=record.text, metadata=dict(record.metadata)))
+        return sorted(records, key=lambda record: record.id)
+
+    def delete_by_metadata(self, filters: dict[str, Any]) -> int:
+        if not isinstance(filters, dict) or not filters:
+            raise ChromaStoreError("chroma validation error: filters must be a non-empty object")
+        removed = [record_id for record_id, record in self.records.items() if self._matches_filters(record, filters)]
+        for record_id in removed:
+            self.records.pop(record_id, None)
+        if removed:
+            self._save()
+        return len(removed)
+
     def get_collection_stats(self) -> dict[str, Any]:
         sources = set()
         documents = set()

@@ -28,6 +28,14 @@ class FileIntegrityChecker(ABC):
     def mark_failed(self, file_hash: str, error_msg: str, file_path: str = "", file_size: int | None = None) -> None:
         raise NotImplementedError
 
+    @abstractmethod
+    def list_processed(self, status: str | None = None) -> list[dict[str, Any]]:
+        raise NotImplementedError
+
+    @abstractmethod
+    def remove_record(self, file_hash: str) -> bool:
+        raise NotImplementedError
+
 
 class SQLiteIntegrityChecker(FileIntegrityChecker):
     def __init__(self, db_path: str = "data/db/ingestion_history.db", timeout: float = 30.0) -> None:
@@ -104,6 +112,29 @@ class SQLiteIntegrityChecker(FileIntegrityChecker):
             ).fetchone()
         return dict(row) if row is not None else None
 
+    def list_processed(self, status: str | None = None) -> list[dict[str, Any]]:
+        params: list[Any] = []
+        where = ""
+        if status is not None:
+            self._validate_status(status)
+            where = " WHERE status = ?"
+            params.append(status)
+        with self._connect() as connection:
+            rows = connection.execute(
+                "SELECT file_hash, file_path, file_size, status, processed_at, error_msg, chunk_count "
+                "FROM ingestion_history"
+                f"{where} "
+                "ORDER BY processed_at DESC, file_path",
+                params,
+            ).fetchall()
+        return [dict(row) for row in rows]
+
+    def remove_record(self, file_hash: str) -> bool:
+        self._validate_hash(file_hash)
+        with self._connect() as connection:
+            cursor = connection.execute("DELETE FROM ingestion_history WHERE file_hash = ?", (file_hash,))
+        return cursor.rowcount > 0
+
     def _initialize(self) -> None:
         with self._connect() as connection:
             connection.execute("PRAGMA journal_mode=WAL")
@@ -129,3 +160,7 @@ class SQLiteIntegrityChecker(FileIntegrityChecker):
     def _validate_hash(self, file_hash: str) -> None:
         if not isinstance(file_hash, str) or not file_hash:
             raise FileIntegrityError("file_hash must be a non-empty string")
+
+    def _validate_status(self, status: str) -> None:
+        if status not in {"success", "failed", "processing"}:
+            raise FileIntegrityError("status must be success, failed, or processing")
