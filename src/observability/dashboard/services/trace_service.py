@@ -42,6 +42,13 @@ class TraceService:
     def query_traces(self) -> list[dict[str, Any]]:
         return self.list_traces("query")
 
+    def search_query_traces(self, keyword: str = "") -> list[dict[str, Any]]:
+        value = keyword.strip().lower()
+        traces = self.query_traces()
+        if not value:
+            return traces
+        return [trace for trace in traces if value in self._query_text(trace).lower()]
+
     def get_trace(self, trace_id: str) -> dict[str, Any] | None:
         for trace in self.list_traces():
             if trace.get("trace_id") == trace_id:
@@ -50,6 +57,9 @@ class TraceService:
 
     def summaries(self, trace_type: str | None = None) -> list[TraceSummary]:
         return [self._summary(trace) for trace in self.list_traces(trace_type)]
+
+    def summary_for_trace(self, trace: dict[str, Any]) -> TraceSummary:
+        return self._summary(trace)
 
     def stage_rows(self, trace: dict[str, Any]) -> list[dict[str, Any]]:
         rows = []
@@ -72,6 +82,44 @@ class TraceService:
     def ingestion_waterfall_rows(self, trace: dict[str, Any]) -> list[dict[str, Any]]:
         wanted = {"load", "split", "transform", "embed", "upsert"}
         return [row for row in self.stage_rows(trace) if row["stage"] in wanted]
+
+    def query_waterfall_rows(self, trace: dict[str, Any]) -> list[dict[str, Any]]:
+        wanted = {"query_processing", "dense_retrieval", "sparse_retrieval", "fusion", "rerank"}
+        return [row for row in self.stage_rows(trace) if row["stage"] in wanted]
+
+    def retrieval_comparison_rows(self, trace: dict[str, Any]) -> list[dict[str, Any]]:
+        rows = []
+        for row in self.stage_rows(trace):
+            if row["stage"] not in {"dense_retrieval", "sparse_retrieval"}:
+                continue
+            details = row["details"]
+            rows.append(
+                {
+                    "route": row["stage"].replace("_retrieval", ""),
+                    "count": int(details.get("count") or 0),
+                    "top_k": int(details.get("top_k") or 0),
+                    "elapsed_ms": row["elapsed_ms"],
+                    "method": row["method"],
+                    "error": details.get("error", ""),
+                }
+            )
+        return rows
+
+    def rerank_rows(self, trace: dict[str, Any]) -> list[dict[str, Any]]:
+        return [row for row in self.stage_rows(trace) if row["stage"] == "rerank"]
+
+    def _query_text(self, trace: dict[str, Any]) -> str:
+        metadata = trace.get("metadata", {})
+        if isinstance(metadata, dict):
+            value = metadata.get("query") or metadata.get("question") or metadata.get("text")
+            if isinstance(value, str):
+                return value
+        for row in self.stage_rows(trace):
+            details = row["details"]
+            value = details.get("query") or details.get("text")
+            if isinstance(value, str):
+                return value
+        return str(trace.get("trace_id", ""))
 
     def _read_jsonl(self) -> list[dict[str, Any]]:
         if not self.trace_path.exists():
