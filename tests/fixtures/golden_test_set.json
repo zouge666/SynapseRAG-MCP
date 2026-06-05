@@ -1,0 +1,14 @@
+{
+  "test_cases": [
+    {
+      "query": "如何配置 Azure OpenAI？",
+      "expected_chunk_ids": [
+        "chunk_azure_openai_config"
+      ],
+      "expected_sources": [
+        "config/settings.yaml"
+      ],
+      "expected_answer": "在配置文件中设置 Azure OpenAI 的 provider、model、endpoint、api_version 和 deployment_name。"
+    }
+  ]
+}
