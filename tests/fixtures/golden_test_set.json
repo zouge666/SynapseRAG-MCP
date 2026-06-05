@@ -9,6 +9,26 @@
         "config/settings.yaml"
       ],
       "expected_answer": "在配置文件中设置 Azure OpenAI 的 provider、model、endpoint、api_version 和 deployment_name。"
+    },
+    {
+      "query": "如何运行评估脚本？",
+      "expected_chunk_ids": [
+        "chunk_evaluate_script"
+      ],
+      "expected_sources": [
+        "scripts/evaluate.py"
+      ],
+      "expected_answer": "运行 scripts/evaluate.py 可以读取 golden test set 并输出 metrics JSON。"
+    },
+    {
+      "query": "如何查看评估面板指标？",
+      "expected_chunk_ids": [
+        "chunk_dashboard_evaluation_panel"
+      ],
+      "expected_sources": [
+        "src/observability/dashboard/pages/evaluation_panel.py"
+      ],
+      "expected_answer": "在 Dashboard 的 Evaluation 页面运行评估后，可以查看 hit_rate、mrr、metrics 表和 query 明细。"
     }
   ]
 }
