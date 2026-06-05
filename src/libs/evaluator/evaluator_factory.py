@@ -5,13 +5,14 @@ from collections.abc import Callable
 from core.settings import EvaluationSettings, Settings
 from libs.evaluator.base_evaluator import BaseEvaluator
 from libs.evaluator.custom_evaluator import CustomEvaluator
+from observability.evaluation.ragas_evaluator import RagasEvaluator
 
 
 EvaluatorBuilder = Callable[[object | None], BaseEvaluator]
 
 
 class EvaluatorFactory:
-    _providers: dict[str, EvaluatorBuilder] = {"custom_metrics": CustomEvaluator}
+    _providers: dict[str, EvaluatorBuilder] = {"custom_metrics": CustomEvaluator, "ragas": RagasEvaluator}
 
     @classmethod
     def register_provider(cls, provider: str, builder: EvaluatorBuilder) -> None:
