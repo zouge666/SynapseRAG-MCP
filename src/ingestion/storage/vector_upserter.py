@@ -26,6 +26,15 @@ class VectorUpserter:
         self._record(trace, "vector_upserter", {"count": len(vector_records)})
         return [record.id for record in vector_records]
 
+    def delete_source(self, source_path: str, trace: object | None = None) -> int:
+        delete_by_metadata = getattr(self._store(), "delete_by_metadata", None)
+        if not callable(delete_by_metadata):
+            return 0
+        removed = int(delete_by_metadata({"source_path": source_path}))
+        removed += int(delete_by_metadata({"source": source_path}))
+        self._record(trace, "vector_upserter.delete_source", {"source_path": source_path, "count": removed})
+        return removed
+
     def _vector_record(self, record: ChunkRecord) -> VectorRecord:
         if record.dense_vector is None:
             raise VectorUpserterError("dense_vector is required")

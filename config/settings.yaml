@@ -7,9 +7,9 @@ llm:
   model: gpt-4o
 
 embedding:
-  provider: openai
-  model: text-embedding-3-small
-  dimensions: 1536
+  provider: local
+  model: local-hash
+  dimensions: 128
 
 vector_store:
   backend: chroma

@@ -3,6 +3,7 @@ import pytest
 from core.settings import EmbeddingSettings, load_settings
 from libs.embedding.base_embedding import BaseEmbedding
 from libs.embedding.embedding_factory import EmbeddingFactory
+from libs.embedding.local_embedding import LocalEmbedding
 
 
 class FakeEmbedding(BaseEmbedding):
@@ -14,9 +15,11 @@ class FakeEmbedding(BaseEmbedding):
 def reset_factory() -> None:
     EmbeddingFactory.unregister_provider("fake")
     EmbeddingFactory.unregister_provider("openai")
+    EmbeddingFactory.unregister_provider("local")
     yield
     EmbeddingFactory.unregister_provider("fake")
     EmbeddingFactory.unregister_provider("openai")
+    EmbeddingFactory.unregister_provider("local")
 
 
 def test_factory_creates_registered_provider_from_embedding_settings() -> None:
@@ -31,13 +34,25 @@ def test_factory_creates_registered_provider_from_embedding_settings() -> None:
 
 
 def test_factory_creates_registered_provider_from_project_settings() -> None:
-    EmbeddingFactory.register_provider("openai", FakeEmbedding)
+    EmbeddingFactory.register_provider("local", FakeEmbedding)
     settings = load_settings("config/settings.yaml")
 
     embedding = EmbeddingFactory.create(settings)
 
     assert isinstance(embedding, FakeEmbedding)
-    assert embedding.settings.provider == "openai"
+    assert embedding.settings.provider == "local"
+
+
+def test_factory_loads_builtin_local_provider() -> None:
+    settings = EmbeddingSettings(provider="local", model="local-hash", dimensions=4)
+
+    embedding = EmbeddingFactory.create(settings)
+    vectors = embedding.embed(["alpha beta", "alpha"])
+
+    assert isinstance(embedding, LocalEmbedding)
+    assert len(vectors) == 2
+    assert all(len(vector) == 4 for vector in vectors)
+    assert vectors[0] != vectors[1]
 
 
 def test_factory_rejects_unknown_provider() -> None:

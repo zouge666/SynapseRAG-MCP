@@ -78,6 +78,16 @@ def test_pdf_loader_supports_tj_arrays(tmp_path) -> None:
     assert document.text == "Hello world"
 
 
+def test_pdf_loader_recovers_utf8_text_literals(tmp_path) -> None:
+    pdf_path = tmp_path / "utf8.pdf"
+    pdf_path.write_bytes("%PDF-1.4\nstream\nBT (测试查询) Tj ET\nendstream\n%%EOF".encode("utf-8"))
+    loader = PdfLoader(image_root=str(tmp_path / "images"))
+
+    document = loader.load(str(pdf_path))
+
+    assert document.text == "测试查询"
+
+
 def test_pdf_loader_reports_missing_file() -> None:
     loader = PdfLoader()
 

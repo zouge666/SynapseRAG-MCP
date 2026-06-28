@@ -59,6 +59,10 @@ class PdfLoader(BaseLoader):
         }
         for source, target in replacements.items():
             value = value.replace(source, target)
+        try:
+            return value.encode("latin-1").decode("utf-8")
+        except UnicodeError:
+            pass
         return value
 
     def _extract_images(self, data: bytes, doc_hash: str) -> list[dict[str, Any]]:

@@ -125,10 +125,17 @@ class FakeBatchProcessor:
 class FakeVectorUpserter:
     def __init__(self) -> None:
         self.records = []
+        self.deleted_sources = []
 
     def upsert(self, records: list[ChunkRecord], trace: object | None = None) -> list[str]:
         self.records.extend(records)
         return [f"vec-{record.id}" for record in records]
+
+    def delete_source(self, source_path: str, trace: object | None = None) -> int:
+        self.deleted_sources.append(source_path)
+        before = len(self.records)
+        self.records = [record for record in self.records if record.metadata.get("source_path") != source_path]
+        return before - len(self.records)
 
 
 def pipeline_parts(tmp_path: Path, skip: bool = False, fail_transform: bool = False):
@@ -235,6 +242,27 @@ def test_pipeline_force_reprocesses_successful_hash(tmp_path: Path) -> None:
     assert result.status == "success"
     assert parts.loader.calls == [str(parts.source_path)]
     assert parts.integrity.success["file_hash"] == "hash-1"
+
+
+def test_pipeline_force_replaces_existing_source_records(tmp_path: Path) -> None:
+    parts = pipeline_parts(tmp_path, skip=True)
+    old_record = ChunkRecord(
+        id="old-chunk",
+        text="Old Alpha",
+        metadata={"source_path": str(parts.source_path), "sparse_token_count": 2},
+        dense_vector=[9.0, 9.0],
+        sparse_vector={"old": 1.0},
+    )
+    parts.vector_upserter.records.append(old_record)
+    parts.bm25_indexer.upsert([old_record])
+
+    result = parts.pipeline.run(parts.source_path, collection="docs", force=True)
+
+    assert result.status == "success"
+    assert parts.vector_upserter.deleted_sources == [str(parts.source_path)]
+    assert [record.id for record in parts.vector_upserter.records] == ["chunk-1", "chunk-2"]
+    assert parts.bm25_indexer.query("old") == []
+    assert parts.bm25_indexer.query("alpha", top_k=1)[0]["chunk_id"] == "chunk-1"
 
 
 def test_pipeline_wraps_failed_stage_and_marks_failed(tmp_path: Path) -> None:

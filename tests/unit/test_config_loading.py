@@ -11,7 +11,9 @@ def test_load_settings_reads_default_config() -> None:
 
     assert isinstance(settings, Settings)
     assert settings.app.name == "synapserag-mcp"
-    assert settings.embedding.provider == "openai"
+    assert settings.embedding.provider == "local"
+    assert settings.embedding.model == "local-hash"
+    assert settings.embedding.dimensions == 128
     assert settings.vector_store.backend == "chroma"
     assert settings.splitter.provider == "recursive"
     assert settings.splitter.chunk_size == 1000

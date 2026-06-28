@@ -103,7 +103,15 @@ class IngestionPipeline:
             chunks = self._run_stage("split", lambda: self.chunker.split_document(document), active_trace, on_progress, 4, total)
             chunks = self._run_stage("transform", lambda: self._transform(chunks, active_trace), active_trace, on_progress, 5, total)
             records = self._run_stage("encode", lambda: self.batch_processor.process(chunks, trace=active_trace), active_trace, on_progress, 6, total, trace_stage="embed")
-            vector_ids = self._run_stage("store", lambda: self._store_records(records, active_trace), active_trace, on_progress, 7, total, trace_stage="upsert")
+            vector_ids = self._run_stage(
+                "store",
+                lambda: self._store_records(records, active_trace, replace_source=path if force else None),
+                active_trace,
+                on_progress,
+                7,
+                total,
+                trace_stage="upsert",
+            )
             self.integrity_checker.mark_success(file_hash, path, file_size=file_size, chunk_count=len(records))
             active_trace.record_stage("pipeline", {"status": "success", "chunk_count": len(records), "image_count": self._image_count(document)})
             return IngestionResult(
@@ -175,11 +183,23 @@ class IngestionPipeline:
             transformed = transform.transform(transformed, trace=trace)
         return transformed
 
-    def _store_records(self, records: list[Any], trace: TraceContext) -> list[str]:
+    def _store_records(self, records: list[Any], trace: TraceContext, replace_source: str | None = None) -> list[str]:
+        if replace_source:
+            self._delete_existing_source(replace_source, trace)
         vector_ids = self.vector_upserter.upsert(records, trace=trace)
         self.bm25_indexer.upsert(records)
         self.bm25_indexer.save()
         return vector_ids
+
+    def _delete_existing_source(self, source_path: str, trace: TraceContext) -> None:
+        vector_count = 0
+        delete_source = getattr(self.vector_upserter, "delete_source", None)
+        if callable(delete_source):
+            vector_count = int(delete_source(source_path, trace=trace))
+        bm25_count = int(self.bm25_indexer.remove_document(source_path))
+        if bm25_count:
+            self.bm25_indexer.save()
+        trace.record_stage("store.replace_source", {"source_path": source_path, "vector_count": vector_count, "bm25_count": bm25_count})
 
     def _stage_details(self, stage: str, result: Any) -> dict[str, Any]:
         if isinstance(result, list):

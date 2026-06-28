@@ -1,0 +1,9 @@
+%PDF-1.4
+1 0 obj << /Type /Catalog /Pages 2 0 R >> endobj
+2 0 obj << /Type /Pages /Kids [3 0 R] /Count 1 >> endobj
+3 0 obj << /Type /Page /Parent 2 0 R /Contents 4 0 R >> endobj
+4 0 obj << /Length 120 >> stream
+BT /F1 12 Tf 72 720 Td (测试查询 sample document for SynapseRAG MCP ingestion query dashboard evaluation) Tj ET
+endstream endobj
+trailer << /Root 1 0 R >>
+%%EOF

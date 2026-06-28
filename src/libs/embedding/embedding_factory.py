@@ -55,3 +55,7 @@ class EmbeddingFactory:
             from libs.embedding.ollama_embedding import OllamaEmbedding
 
             EmbeddingFactory.register_provider("ollama", OllamaEmbedding)
+        elif provider == "local":
+            from libs.embedding.local_embedding import LocalEmbedding
+
+            EmbeddingFactory.register_provider("local", LocalEmbedding)
