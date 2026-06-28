@@ -66,3 +66,39 @@ def test_factory_rejects_unknown_backend() -> None:
 
     with pytest.raises(ValueError, match="unsupported reranker backend: missing"):
         RerankerFactory.create(settings)
+
+
+def test_factory_normalizes_registered_backend_names() -> None:
+    RerankerFactory.register_provider(" Fake ", FakeReranker)
+    settings = RerankSettings(enabled=True, backend=" FAKE ")
+
+    reranker = RerankerFactory.create(settings)
+
+    assert isinstance(reranker, FakeReranker)
+    assert reranker.settings.backend == " FAKE "
+
+
+def test_factory_rejects_empty_backend_name() -> None:
+    settings = RerankSettings(enabled=True, backend=" ")
+
+    with pytest.raises(ValueError, match="rerank.backend is required"):
+        RerankerFactory.create(settings)
+
+
+def test_unregister_provider_keeps_none_backend_available() -> None:
+    RerankerFactory.unregister_provider("none")
+    settings = RerankSettings(enabled=False, backend="none")
+
+    reranker = RerankerFactory.create(settings)
+
+    assert isinstance(reranker, NoneReranker)
+
+
+def test_none_reranker_preserves_candidate_shapes_for_empty_and_metadata() -> None:
+    settings = RerankSettings(enabled=False, backend="none")
+    reranker = RerankerFactory.create(settings)
+    candidate = RerankCandidate(id="doc-1", text="alpha", score=0.7, metadata={"source": "one"})
+
+    assert reranker.rerank("query", []) == []
+    assert reranker.rerank("query", [candidate])[0] == candidate
+    assert reranker.rerank("query", [candidate])[0].metadata == {"source": "one"}

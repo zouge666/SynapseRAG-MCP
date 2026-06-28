@@ -69,3 +69,44 @@ def test_factory_rejects_unknown_provider() -> None:
 
     with pytest.raises(ValueError, match="unsupported evaluator backend: missing"):
         EvaluatorFactory.create(settings)
+
+
+def test_custom_evaluator_uses_first_retrieved_hit_with_multiple_golden_ids() -> None:
+    evaluator = CustomEvaluator()
+    case = EvaluationCase(query="q", retrieved_ids=["a", "b", "c", "d"], golden_ids=["c", "d"])
+
+    metrics = evaluator.evaluate(case)
+
+    assert metrics == {"hit_rate": 1.0, "mrr": 1 / 3}
+
+
+def test_custom_evaluator_handles_duplicate_ids_without_changing_metric_shape() -> None:
+    evaluator = CustomEvaluator()
+    case = EvaluationCase(query="q", retrieved_ids=["a", "a", "b"], golden_ids=["b", "b"])
+
+    metrics = evaluator.evaluate(case)
+
+    assert set(metrics) == {"hit_rate", "mrr"}
+    assert metrics["hit_rate"] == 1.0
+    assert metrics["mrr"] == 1 / 3
+    assert all(isinstance(value, float) for value in metrics.values())
+
+
+def test_evaluation_case_metadata_defaults_are_independent() -> None:
+    first = EvaluationCase(query="q1", retrieved_ids=[], golden_ids=[])
+    second = EvaluationCase(query="q2", retrieved_ids=[], golden_ids=[])
+
+    first.metadata["source"] = "one"
+
+    assert second.metadata == {}
+
+
+def test_factory_normalizes_string_provider_name() -> None:
+    evaluator = EvaluatorFactory.create(" CUSTOM ")
+
+    assert isinstance(evaluator, CustomEvaluator)
+
+
+def test_factory_rejects_empty_provider_name() -> None:
+    with pytest.raises(ValueError, match="evaluation backend is required"):
+        EvaluatorFactory.create(" ")

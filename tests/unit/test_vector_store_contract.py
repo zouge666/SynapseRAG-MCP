@@ -34,6 +34,14 @@ class FakeVectorStore(BaseVectorStore):
     def get_by_ids(self, ids: list[str], trace: object | None = None) -> list[VectorRecord]:
         return [self.records[record_id] for record_id in ids if record_id in self.records]
 
+    def delete_by_metadata(self, filters: dict[str, object]) -> int:
+        if not isinstance(filters, dict) or not filters:
+            raise ValueError("filters must be a non-empty object")
+        removed = [record_id for record_id, record in self.records.items() if all(record.metadata.get(key) == value for key, value in filters.items())]
+        for record_id in removed:
+            self.records.pop(record_id, None)
+        return len(removed)
+
 
 @pytest.fixture(autouse=True)
 def reset_factory() -> None:
@@ -89,3 +97,41 @@ def test_factory_rejects_unknown_backend() -> None:
 
     with pytest.raises(ValueError, match="unsupported vector store backend: missing"):
         VectorStoreFactory.create(settings)
+
+
+def test_vector_store_contract_delete_by_metadata_removes_only_matching_records() -> None:
+    settings = VectorStoreSettings(backend="fake", persist_path="memory")
+    store = FakeVectorStore(settings)
+    store.upsert(
+        [
+            VectorRecord(id="a", vector=[1.0], text="alpha", metadata={"source_path": "docs/a.pdf", "collection": "docs"}),
+            VectorRecord(id="b", vector=[1.0], text="beta", metadata={"source_path": "docs/a.pdf", "collection": "docs"}),
+            VectorRecord(id="c", vector=[1.0], text="gamma", metadata={"source_path": "docs/c.pdf", "collection": "docs"}),
+        ]
+    )
+
+    deleted = store.delete_by_metadata({"source_path": "docs/a.pdf"})
+
+    assert deleted == 2
+    assert [record.id for record in store.get_by_ids(["a", "b", "c"])] == ["c"]
+    assert [result.id for result in store.query([1.0], top_k=5, filters={"collection": "docs"})] == ["c"]
+
+
+def test_vector_store_contract_delete_by_metadata_returns_zero_for_no_match() -> None:
+    settings = VectorStoreSettings(backend="fake", persist_path="memory")
+    store = FakeVectorStore(settings)
+    store.upsert([VectorRecord(id="a", vector=[1.0], text="alpha", metadata={"source_path": "docs/a.pdf"})])
+
+    deleted = store.delete_by_metadata({"source_path": "docs/missing.pdf"})
+
+    assert deleted == 0
+    assert [record.id for record in store.get_by_ids(["a"])] == ["a"]
+
+
+@pytest.mark.parametrize("filters", [{}, []])
+def test_vector_store_contract_delete_by_metadata_rejects_invalid_filters(filters: object) -> None:
+    settings = VectorStoreSettings(backend="fake", persist_path="memory")
+    store = FakeVectorStore(settings)
+
+    with pytest.raises(ValueError, match="filters must be a non-empty object"):
+        store.delete_by_metadata(filters)
