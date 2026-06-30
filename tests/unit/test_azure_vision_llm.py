@@ -9,7 +9,9 @@ from libs.llm.azure_vision_llm import AzureVisionLLM, AzureVisionLLMError
 from libs.llm.llm_factory import LLMFactory
 
 
-PNG_BYTES = b"\x89PNG\r\n\x1a\nimage-bytes"
+PNG_BYTES = base64.b64decode(
+    "iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mNk+A8AAQUBAScY42YAAAAASUVORK5CYII="
+)
 
 
 class FakeTransport:
