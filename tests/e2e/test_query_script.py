@@ -64,6 +64,7 @@ def test_query_script_runs_search_and_reranker(capsys) -> None:
         ["--query", "find beta", "--top-k", "2", "--collection", "docs"],
         search_factory=lambda settings: search,
         reranker_factory=lambda settings: reranker,
+        trace_writer=lambda trace, path: trace,
     )
 
     output = capsys.readouterr()
@@ -102,6 +103,7 @@ def test_query_script_verbose_prints_candidates_final_results_and_trace(capsys) 
         ["--query", "find beta", "--top-k", "2", "--verbose"],
         search_factory=lambda settings: search,
         reranker_factory=lambda settings: reranker,
+        trace_writer=lambda trace, path: trace,
     )
 
     output = capsys.readouterr()
@@ -116,7 +118,7 @@ def test_query_script_verbose_prints_candidates_final_results_and_trace(capsys) 
 def test_query_script_reports_no_data_before_search(monkeypatch, capsys) -> None:
     monkeypatch.setattr(query_script, "has_ingested_data", lambda settings, collection: False)
 
-    code = query_script.main(["--query", "anything"])
+    code = query_script.main(["--query", "anything"], trace_writer=lambda trace, path: trace)
 
     output = capsys.readouterr()
     assert code == 0

@@ -5,6 +5,8 @@ import re
 from pathlib import Path
 from typing import Any
 
+import pymupdf
+
 from core import Document, image_placeholder
 from libs.loader.base_loader import BaseLoader, LoaderError
 
@@ -32,38 +34,16 @@ class PdfLoader(BaseLoader):
         return Document(id=doc_hash, text=text, metadata=metadata)
 
     def _extract_text(self, data: bytes) -> str:
-        raw = data.decode("latin-1", errors="ignore")
-        parts: list[str] = []
-        for value in re.findall(r"\((.*?)\)\s*Tj", raw, flags=re.DOTALL):
-            parts.append(self._decode_pdf_text(value))
-        for array in re.findall(r"\[(.*?)\]\s*TJ", raw, flags=re.DOTALL):
-            values = re.findall(r"\((.*?)\)", array, flags=re.DOTALL)
-            if values:
-                parts.append("".join(self._decode_pdf_text(value) for value in values))
-        text = "\n".join(part for part in parts if part).strip()
-        if text:
-            return text
-        fallback = re.sub(r"\s+", " ", raw).strip()
-        if fallback:
-            return fallback
-        raise LoaderError("pdf text extraction failed")
-
-    def _decode_pdf_text(self, value: str) -> str:
-        replacements = {
-            r"\(": "(",
-            r"\)": ")",
-            r"\\": "\\",
-            r"\n": "\n",
-            r"\r": "\r",
-            r"\t": "\t",
-        }
-        for source, target in replacements.items():
-            value = value.replace(source, target)
         try:
-            return value.encode("latin-1").decode("utf-8")
-        except UnicodeError:
-            pass
-        return value
+            with pymupdf.open(stream=data, filetype="pdf") as document:
+                pages = [page.get_text("text", sort=True).strip() for page in document]
+        except (pymupdf.FileDataError, RuntimeError, ValueError) as error:
+            raise LoaderError(f"pdf text extraction failed: {error}") from error
+
+        text = "\n\n".join(page for page in pages if page).strip()
+        if not text:
+            raise LoaderError("pdf contains no extractable text; OCR may be required")
+        return text
 
     def _extract_images(self, data: bytes, doc_hash: str) -> list[dict[str, Any]]:
         try:

@@ -90,6 +90,8 @@ class IngestionPipeline:
             file_hash = self._run_stage("integrity", lambda: self.integrity_checker.compute_sha256(path), active_trace, on_progress, 1, total)
             if self.integrity_checker.should_skip(file_hash) and not force:
                 active_trace.record_stage("pipeline.skip", {"file_hash": file_hash})
+                if on_progress is not None:
+                    on_progress("skipped", total, total)
                 return IngestionResult(
                     source_path=path,
                     collection=collection,
@@ -157,8 +159,10 @@ class IngestionPipeline:
 
     def _store_document_images(self, document: Document, collection: str, file_hash: str) -> Document:
         images = document.metadata.get("images", [])
+        metadata = dict(document.metadata)
+        metadata["collection"] = collection
         if not isinstance(images, list) or not images:
-            return document
+            return Document(id=document.id, text=document.text, metadata=metadata)
         updated_images = []
         seen = set()
         for image in images:
@@ -173,7 +177,6 @@ class IngestionPipeline:
             page_num = image.get("page") if isinstance(image.get("page"), int) else None
             updated["path"] = self.image_storage.save_image(image_id, image_path, collection=collection, doc_hash=file_hash, page_num=page_num)
             updated_images.append(updated)
-        metadata = dict(document.metadata)
         metadata["images"] = updated_images
         return Document(id=document.id, text=document.text, metadata=metadata)
 

@@ -131,6 +131,25 @@ def test_chroma_store_get_by_ids_preserves_input_order_and_records(tmp_path) -> 
     assert [(record.id, record.text) for record in records] == [("chunk-2", "beta"), ("chunk-1", "alpha")]
 
 
+def test_sparse_retriever_hydrates_chunk_ids_from_vector_id_records(tmp_path) -> None:
+    store = ChromaStore(VectorStoreSettings(backend="chroma", persist_path=str(tmp_path), collection="docs"))
+    store.upsert(
+        [
+            VectorRecord(
+                id="vec-delta",
+                vector=[1.0, 0.0],
+                text="delta",
+                metadata={"source_path": "docs/b.pdf", "chunk_id": "chunk-3"},
+            )
+        ]
+    )
+
+    results = SparseRetriever(SimpleNamespace(), bm25_indexer=indexer(), vector_store=store).retrieve(["delta"], top_k=1)
+
+    assert [result.chunk_id for result in results] == ["chunk-3"]
+    assert results[0].text == "delta"
+
+
 def test_chroma_store_get_by_ids_rejects_invalid_ids(tmp_path) -> None:
     store = ChromaStore(VectorStoreSettings(backend="chroma", persist_path=str(tmp_path), collection="docs"))
 

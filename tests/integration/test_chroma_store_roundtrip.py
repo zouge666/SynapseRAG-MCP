@@ -44,6 +44,26 @@ def test_chroma_store_persists_records_between_instances(tmp_path) -> None:
     assert results[0].text == "alpha text"
 
 
+def test_chroma_store_matches_legacy_records_by_store_collection(tmp_path) -> None:
+    store = ChromaStore(VectorStoreSettings(backend="chroma", persist_path=str(tmp_path), collection="docs"))
+    store.upsert([VectorRecord(id="alpha", vector=[1.0, 0.0], text="alpha text", metadata={})])
+
+    results = store.query([1.0, 0.0], top_k=1, filters={"collection": "docs"})
+
+    assert [result.id for result in results] == ["alpha"]
+
+
+def test_chroma_store_get_by_ids_accepts_chunk_id_aliases(tmp_path) -> None:
+    store = ChromaStore(VectorStoreSettings(backend="chroma", persist_path=str(tmp_path), collection="docs"))
+    store.upsert(
+        [VectorRecord(id="vec-alpha", vector=[1.0, 0.0], text="alpha text", metadata={"chunk_id": "chunk-alpha"})]
+    )
+
+    records = store.get_by_ids(["chunk-alpha"])
+
+    assert [(record.id, record.metadata["chunk_id"]) for record in records] == [("vec-alpha", "chunk-alpha")]
+
+
 def test_chroma_store_upsert_replaces_existing_record(tmp_path) -> None:
     store = ChromaStore(VectorStoreSettings(backend="chroma", persist_path=str(tmp_path), collection="docs"))
     store.upsert([VectorRecord(id="alpha", vector=[1.0, 0.0], text="old", metadata={"version": 1})])

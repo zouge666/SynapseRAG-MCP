@@ -1,31 +1,26 @@
+import base64
 from pathlib import Path
 
+import pymupdf
 import pytest
 
 from core import Document
 from libs.loader import BaseLoader, LoaderError, PdfLoader
 
 
+PNG_BYTES = base64.b64decode(
+    "iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mNk+A8AAQUBAScY42YAAAAASUVORK5CYII="
+)
+
+
 def write_pdf(path: Path, text: str, image_bytes: bytes | None = None) -> None:
-    content = [
-        "%PDF-1.4",
-        "1 0 obj << /Type /Catalog /Pages 2 0 R >> endobj",
-        "2 0 obj << /Type /Pages /Kids [3 0 R] /Count 1 >> endobj",
-        "3 0 obj << /Type /Page /Parent 2 0 R /Contents 4 0 R >> endobj",
-        f"4 0 obj << /Length {len(text) + 40} >> stream",
-        f"BT /F1 12 Tf 72 720 Td ({text}) Tj ET",
-        "endstream endobj",
-    ]
+    document = pymupdf.open()
+    page = document.new_page()
+    page.insert_text((72, 72), text)
     if image_bytes is not None:
-        content.extend(
-            [
-                "5 0 obj << /Type /XObject /Subtype /Image /Width 1 /Height 1 /ColorSpace /DeviceRGB /BitsPerComponent 8 >> stream",
-                image_bytes.decode("latin-1"),
-                "endstream endobj",
-            ]
-        )
-    content.extend(["trailer << /Root 1 0 R >>", "%%EOF"])
-    path.write_bytes("\n".join(content).encode("latin-1"))
+        page.insert_image(pymupdf.Rect(72, 90, 73, 91), stream=image_bytes)
+    document.save(path, deflate=True)
+    document.close()
 
 
 def test_pdf_loader_implements_base_loader_contract() -> None:
@@ -53,7 +48,7 @@ def test_pdf_loader_loads_simple_pdf_as_document(tmp_path) -> None:
 
 def test_pdf_loader_extracts_images_and_inserts_placeholders(tmp_path) -> None:
     pdf_path = tmp_path / "with_images.pdf"
-    write_pdf(pdf_path, "Look here", image_bytes=b"fake-png-bytes")
+    write_pdf(pdf_path, "Look here", image_bytes=PNG_BYTES)
     loader = PdfLoader(image_root=str(tmp_path / "images"))
 
     document = loader.load(str(pdf_path))
@@ -65,27 +60,29 @@ def test_pdf_loader_extracts_images_and_inserts_placeholders(tmp_path) -> None:
     assert image["text_length"] == len(f"[IMAGE: {image['id']}]")
     assert image["page"] == 0
     assert image["position"] == {}
-    assert Path(image["path"]).read_bytes() == b"fake-png-bytes"
+    assert Path(image["path"]).read_bytes()
 
 
-def test_pdf_loader_supports_tj_arrays(tmp_path) -> None:
-    pdf_path = tmp_path / "array.pdf"
-    pdf_path.write_text("%PDF-1.4\nstream\nBT [(Hello) 120 ( world)] TJ ET\nendstream\n%%EOF", encoding="latin-1")
+def test_pdf_loader_extracts_text_from_compressed_content_stream(tmp_path) -> None:
+    pdf_path = tmp_path / "compressed.pdf"
+    write_pdf(pdf_path, "Hello compressed PDF")
     loader = PdfLoader(image_root=str(tmp_path / "images"))
 
     document = loader.load(str(pdf_path))
 
-    assert document.text == "Hello world"
+    assert document.text == "Hello compressed PDF"
 
 
-def test_pdf_loader_recovers_utf8_text_literals(tmp_path) -> None:
-    pdf_path = tmp_path / "utf8.pdf"
-    pdf_path.write_bytes("%PDF-1.4\nstream\nBT (测试查询) Tj ET\nendstream\n%%EOF".encode("utf-8"))
+def test_pdf_loader_rejects_pdf_without_extractable_text(tmp_path) -> None:
+    pdf_path = tmp_path / "empty.pdf"
+    document = pymupdf.open()
+    document.new_page()
+    document.save(pdf_path)
+    document.close()
     loader = PdfLoader(image_root=str(tmp_path / "images"))
 
-    document = loader.load(str(pdf_path))
-
-    assert document.text == "测试查询"
+    with pytest.raises(LoaderError, match="OCR may be required"):
+        loader.load(str(pdf_path))
 
 
 def test_pdf_loader_reports_missing_file() -> None:
@@ -97,7 +94,7 @@ def test_pdf_loader_reports_missing_file() -> None:
 
 def test_pdf_loader_degrades_when_image_write_fails(tmp_path, monkeypatch) -> None:
     pdf_path = tmp_path / "with_bad_image.pdf"
-    write_pdf(pdf_path, "Look here", image_bytes=b"fake-png-bytes")
+    write_pdf(pdf_path, "Look here", image_bytes=PNG_BYTES)
     loader = PdfLoader(image_root=str(tmp_path / "images"))
 
     def fail_write(self, data: bytes) -> int:

@@ -32,7 +32,12 @@ class SparseRetriever:
         scored = self._indexer().query(active_keywords, top_k=top_k)
         ids = [str(item["chunk_id"]) for item in scored]
         records = self._store().get_by_ids(ids, trace=trace)
-        records_by_id = {record.id: record for record in records}
+        records_by_id = {}
+        for record in records:
+            records_by_id[record.id] = record
+            chunk_id = record.metadata.get("chunk_id")
+            if isinstance(chunk_id, str) and chunk_id:
+                records_by_id[chunk_id] = record
         results = []
         for item in scored:
             chunk_id = str(item["chunk_id"])

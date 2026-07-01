@@ -55,9 +55,14 @@ class ChromaStore(BaseVectorStore):
     def get_by_ids(self, ids: list[str], trace: object | None = None) -> list[VectorRecord]:
         if not isinstance(ids, list) or not all(isinstance(item, str) and item for item in ids):
             raise ChromaStoreError("chroma validation error: ids must be a list of non-empty strings")
+        aliases = {
+            str(record.metadata["chunk_id"]): record
+            for record in self.records.values()
+            if isinstance(record.metadata.get("chunk_id"), str) and record.metadata["chunk_id"]
+        }
         records = []
         for record_id in ids:
-            record = self.records.get(record_id)
+            record = self.records.get(record_id) or aliases.get(record_id)
             if record is not None:
                 records.append(VectorRecord(id=record.id, vector=list(record.vector), text=record.text, metadata=dict(record.metadata)))
         return records
@@ -156,7 +161,13 @@ class ChromaStore(BaseVectorStore):
     def _matches_filters(self, record: VectorRecord, filters: dict[str, Any]) -> bool:
         if not isinstance(filters, dict):
             raise ChromaStoreError("chroma validation error: filters must be object")
-        return all(record.metadata.get(key) == value for key, value in filters.items())
+        for key, value in filters.items():
+            actual = record.metadata.get(key)
+            if key == "collection" and actual is None:
+                actual = self.collection
+            if actual != value:
+                return False
+        return True
 
     def _cosine_similarity(self, left: list[float], right: list[float]) -> float:
         if len(left) != len(right):

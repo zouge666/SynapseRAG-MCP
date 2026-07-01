@@ -2,7 +2,7 @@ from dataclasses import dataclass
 from pathlib import Path
 from types import SimpleNamespace
 
-from observability.dashboard.pages.ingestion_manager import _delete_document, _progress_callback, _run_ingestion, _save_uploaded_file
+from observability.dashboard.pages.ingestion_manager import _delete_document, _progress_callback, _progress_message, _run_ingestion, _save_uploaded_file
 
 
 class FakeUploadedFile:
@@ -78,7 +78,11 @@ def test_progress_callback_updates_widgets() -> None:
     callback("split", 2, 4)
 
     assert progress.values == [0.5]
-    assert status.values == ["split 2/4"]
+    assert status.values == ["正在切分文本（2/4）"]
+
+
+def test_progress_message_explains_skipped_duplicate() -> None:
+    assert _progress_message("skipped", 7, 7) == "检测到相同文件，已跳过重复摄取（7/7）"
 
 
 def test_run_ingestion_saves_upload_and_passes_progress(tmp_path: Path) -> None:
@@ -93,7 +97,7 @@ def test_run_ingestion_saves_upload_and_passes_progress(tmp_path: Path) -> None:
     assert pipeline.calls[0]["force"] is True
     assert Path(pipeline.calls[0]["source_path"]).name == "sample.pdf"
     assert progress.values == [0.5, 1.0]
-    assert status.values == ["load 1/2", "store 2/2"]
+    assert status.values == ["正在读取 PDF 内容（1/2）", "正在写入索引（2/2）"]
 
 
 def test_delete_document_calls_document_manager() -> None:

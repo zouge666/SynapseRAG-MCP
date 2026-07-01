@@ -14,6 +14,7 @@ if str(SRC) not in sys.path:
 
 from core.settings import load_settings
 from ingestion import IngestionPipeline, IngestionResult
+from observability.logger import write_trace
 
 
 PipelineFactory = Callable[[object], IngestionPipeline]
@@ -59,7 +60,10 @@ def run_ingestion(
     for path in paths:
         active_path = str(path)
         progress = _progress_printer(active_path) if emit_progress else None
-        results.append(pipeline.run(active_path, collection=collection, force=force, on_progress=progress))
+        result = pipeline.run(active_path, collection=collection, force=force, on_progress=progress)
+        results.append(result)
+        if isinstance(result.trace, dict):
+            write_trace(result.trace, path=settings.observability.trace_path)
     return results
 
 

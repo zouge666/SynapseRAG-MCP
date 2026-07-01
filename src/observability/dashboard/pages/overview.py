@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+from html import escape
 from typing import Any
 
 from libs.vector_store.chroma_store import ChromaStore
@@ -25,16 +26,11 @@ def render() -> None:
 
     st.subheader("Components")
     components = service.component_dicts(settings)
-    columns = st.columns(4)
-    for index, component in enumerate(components):
-        with columns[index % len(columns)]:
-            st.markdown(f"**{component['name']}**")
-            st.caption(component["provider"])
-            st.write(component["detail"])
-            st.status(component["status"], expanded=False)
-            metadata = component.get("metadata") or {}
-            if metadata:
-                st.json(metadata, expanded=False)
+    for start in range(0, len(components), 4):
+        columns = st.columns(4)
+        for column, component in zip(columns, components[start : start + 4]):
+            with column:
+                st.markdown(_component_card(component), unsafe_allow_html=True)
 
     st.subheader("Data Assets")
     stats = _collection_stats(settings)
@@ -44,6 +40,31 @@ def render() -> None:
     metric_columns[2].metric("Sources", stats.get("source_count", 0))
     metric_columns[3].metric("Persisted", "yes" if stats.get("persisted") else "no")
     st.json(stats, expanded=False)
+
+
+def _component_card(component: dict[str, Any]) -> str:
+    """Render a fixed-height summary so component rows stay visually aligned."""
+    is_disabled = component["status"] == "disabled"
+    status_class = " synapserag-component-card__status--disabled" if is_disabled else ""
+    status_text = "○ Disabled" if is_disabled else "✓ Configured"
+    metadata = component.get("metadata") or {}
+    metadata_text = _metadata_summary(metadata)
+    metadata_html = (
+        f'<div class="synapserag-component-card__provider">{escape(metadata_text)}</div>' if metadata_text else ""
+    )
+    return (
+        '<div class="synapserag-component-card">'
+        f'<div class="synapserag-component-card__name">{escape(str(component["name"]))}</div>'
+        f'<div class="synapserag-component-card__provider">{escape(str(component["provider"]))}</div>'
+        f'<div class="synapserag-component-card__detail">{escape(str(component["detail"]))}</div>'
+        f'<div class="synapserag-component-card__status{status_class}">{status_text}</div>'
+        f"{metadata_html}"
+        "</div>"
+    )
+
+
+def _metadata_summary(metadata: dict[str, Any]) -> str:
+    return " · ".join(f"{key}: {value}" for key, value in metadata.items())
 
 
 def _collection_stats(settings: Any) -> dict[str, Any]:

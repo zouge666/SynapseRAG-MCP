@@ -6,6 +6,7 @@ from typing import Any, Callable
 
 from ingestion import IngestionPipeline
 from observability.dashboard.services.data_service import DataService
+from observability.logger import write_trace
 
 
 def render() -> None:
@@ -26,8 +27,15 @@ def render() -> None:
         except Exception as error:
             st.error(str(error))
         else:
-            st.success(result.get("status", "done"))
-            st.json(result, expanded=False)
+            if result.get("skipped") or result.get("status") == "skipped":
+                st.info(
+                    "文件内容与已入库版本一致，因此没有重复处理。"
+                    "现有索引可直接用于查询；如需重新解析，请勾选 Force reprocess 后再次摄取。"
+                )
+            else:
+                st.success("摄取完成：文件已解析、切分并写入当前 Collection。")
+            with st.expander("查看处理详情"):
+                st.json(result, expanded=False)
 
     st.subheader("Documents")
     documents = service.list_documents(collection)
@@ -61,6 +69,10 @@ def _run_ingestion(
         force=force,
         on_progress=_progress_callback(progress_widget, status_widget),
     )
+    trace = getattr(result, "trace", None)
+    if isinstance(trace, dict):
+        trace_path = getattr(getattr(settings, "observability", None), "trace_path", "logs/traces.jsonl")
+        write_trace(trace, path=trace_path)
     return result.to_dict() if hasattr(result, "to_dict") else dict(result)
 
 
@@ -78,9 +90,24 @@ def _progress_callback(progress_widget: Any, status_widget: Any) -> Callable[[st
     def update(stage: str, current: int, total: int) -> None:
         value = current / total if total else 0.0
         progress_widget.progress(value)
-        status_widget.write(f"{stage} {current}/{total}")
+        status_widget.write(_progress_message(stage, current, total))
 
     return update
+
+
+def _progress_message(stage: str, current: int, total: int) -> str:
+    if stage == "skipped":
+        return f"检测到相同文件，已跳过重复摄取（{current}/{total}）"
+    labels = {
+        "integrity": "正在检查文件是否已处理",
+        "load": "正在读取 PDF 内容",
+        "image_store": "正在保存文档图片",
+        "split": "正在切分文本",
+        "transform": "正在整理文本块",
+        "encode": "正在生成向量",
+        "store": "正在写入索引",
+    }
+    return f"{labels.get(stage, stage)}（{current}/{total}）"
 
 
 def _delete_document(service: DataService, source_path: str, collection: str) -> dict[str, Any]:

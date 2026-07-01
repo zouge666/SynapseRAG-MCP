@@ -19,10 +19,12 @@ from core import RetrievalResult
 from core.query_engine import DenseRetriever, HybridSearch, QueryProcessor, RRFusion, Reranker, SparseRetriever
 from core.settings import load_settings
 from core.trace import TraceContext
+from observability.logger import write_trace
 
 
 SearchFactory = Callable[[object], HybridSearch]
 RerankerFactory = Callable[[object], Reranker]
+TraceWriter = Callable[..., dict[str, Any]]
 
 
 @dataclass(frozen=True)
@@ -94,6 +96,7 @@ def main(
     argv: Sequence[str] | None = None,
     search_factory: SearchFactory | None = None,
     reranker_factory: RerankerFactory | None = None,
+    trace_writer: TraceWriter = write_trace,
 ) -> int:
     parser = build_parser()
     args = parser.parse_args(argv)
@@ -107,6 +110,8 @@ def main(
             search_factory=search_factory,
             reranker_factory=reranker_factory,
         )
+        settings = load_settings(args.settings)
+        trace_writer(result.trace.to_dict(), path=settings.observability.trace_path)
     except Exception as error:
         print(f"query failed: {error}", file=sys.stderr)
         return 1

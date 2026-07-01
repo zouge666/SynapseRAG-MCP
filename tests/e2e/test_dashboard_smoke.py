@@ -2,10 +2,13 @@ import sys
 from types import ModuleType, SimpleNamespace
 
 from observability.dashboard import app
-from observability.dashboard.pages import data_browser, evaluation_panel, ingestion_manager, ingestion_traces, overview, query_traces
+from observability.dashboard.pages import data_browser, evaluation_panel, ingestion_manager, ingestion_traces, overview, query_console, query_traces
 
 
 class FakeContext:
+    def __init__(self, status_calls=None):
+        self.status_calls = status_calls if status_calls is not None else []
+
     def __enter__(self):
         return self
 
@@ -32,13 +35,16 @@ class FakeContext:
             if name == "columns":
                 spec = args[0] if args else 1
                 count = len(spec) if isinstance(spec, list) else int(spec)
-                return [FakeContext() for _ in range(count)]
-            if name in {"expander", "status"}:
-                return FakeContext()
+                return [FakeContext(self.status_calls) for _ in range(count)]
+            if name == "status":
+                self.status_calls.append((args, kwargs))
+                return FakeContext(self.status_calls)
+            if name == "expander":
+                return FakeContext(self.status_calls)
             if name == "empty":
-                return FakeContext()
+                return FakeContext(self.status_calls)
             if name == "progress":
-                return FakeContext()
+                return FakeContext(self.status_calls)
             return None
 
         return call
@@ -47,11 +53,13 @@ class FakeContext:
 class FakeStreamlit(ModuleType):
     def __init__(self) -> None:
         super().__init__("streamlit")
-        self.sidebar = FakeContext()
+        self.status_calls = []
+        self.markdowns = []
+        self.sidebar = FakeContext(self.status_calls)
         self.pages = []
 
-    def Page(self, render, title: str, icon: str):
-        page = SimpleNamespace(render=render, title=title, icon=icon)
+    def Page(self, render, title: str, icon: str, url_path: str, default: bool = False):
+        page = SimpleNamespace(render=render, title=title, icon=icon, url_path=url_path, default=default)
         self.pages.append(page)
         return page
 
@@ -60,7 +68,12 @@ class FakeStreamlit(ModuleType):
         return SimpleNamespace(run=lambda: [page.render() for page in pages])
 
     def __getattr__(self, name):
-        return getattr(FakeContext(), name)
+        if name == "markdown":
+            def markdown(*args, **kwargs):
+                self.markdowns.append((args, kwargs))
+
+            return markdown
+        return getattr(FakeContext(self.status_calls), name)
 
 
 def install_fake_streamlit(monkeypatch) -> FakeStreamlit:
@@ -78,14 +91,26 @@ def test_dashboard_app_registers_and_runs_all_pages(monkeypatch) -> None:
         "System Overview",
         "Data Browser",
         "Ingestion Manager",
+        "Query",
         "Ingestion Traces",
         "Query Traces",
         "Evaluation",
     ]
+    assert [page.url_path for page in fake.pages] == [
+        "overview",
+        "data-browser",
+        "ingestion-manager",
+        "query",
+        "ingestion-traces",
+        "query-traces",
+        "evaluation",
+    ]
+    assert [page.title for page in fake.pages if page.default] == ["System Overview"]
+    assert any("stSidebarNav" in args[0] for args, _ in fake.markdowns)
 
 
 def test_dashboard_pages_render_without_python_exceptions(monkeypatch) -> None:
     install_fake_streamlit(monkeypatch)
 
-    for page in [overview, data_browser, ingestion_manager, ingestion_traces, query_traces, evaluation_panel]:
+    for page in [overview, data_browser, ingestion_manager, query_console, ingestion_traces, query_traces, evaluation_panel]:
         page.render()

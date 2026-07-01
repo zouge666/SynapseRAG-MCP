@@ -30,8 +30,8 @@ class FakeLoader:
 class FakeChunker:
     def split_document(self, document: Document) -> list[Chunk]:
         return [
-            Chunk(id="chunk-1", text="Alpha", metadata={"source_path": document.metadata["source_path"]}, start_offset=0, end_offset=5, source_ref=document.id),
-            Chunk(id="chunk-2", text="Beta", metadata={"source_path": document.metadata["source_path"]}, start_offset=7, end_offset=11, source_ref=document.id),
+            Chunk(id="chunk-1", text="Alpha", metadata=dict(document.metadata), start_offset=0, end_offset=5, source_ref=document.id),
+            Chunk(id="chunk-2", text="Beta", metadata=dict(document.metadata), start_offset=7, end_offset=11, source_ref=document.id),
         ]
 
 
@@ -107,6 +107,20 @@ def test_ingestion_pipeline_calls_progress_callback_for_each_stage(tmp_path: Pat
         ("encode", 6, 7),
         ("store", 7, 7),
     ]
+    assert pipeline.bm25_indexer.records[0].metadata["collection"] == "docs"
+
+
+def test_ingestion_pipeline_completes_progress_when_file_is_skipped(tmp_path: Path) -> None:
+    source_path = tmp_path / "sample.pdf"
+    source_path.write_bytes(b"pdf")
+    progress = []
+    pipeline = make_pipeline()
+    pipeline.integrity_checker.should_skip = lambda file_hash: True
+
+    result = pipeline.run(source_path, collection="docs", on_progress=lambda stage, current, total: progress.append((stage, current, total)))
+
+    assert result.status == "skipped"
+    assert progress == [("integrity", 1, 7), ("skipped", 7, 7)]
 
 
 def test_ingestion_pipeline_runs_without_progress_callback(tmp_path: Path) -> None:

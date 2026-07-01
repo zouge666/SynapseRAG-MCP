@@ -1,0 +1,82 @@
+{
+  "test_cases": [
+    {
+      "query": "星桥咖啡馆的现任店长是谁，每周例会在什么时候、什么地点举行？",
+      "expected_chunk_ids": [
+        "57ca6362ffe3d558bf6560327c845c5e308bbde98660a4ac594b5a92b6d38c18_0000_b1573749"
+      ],
+      "expected_sources": [
+        "pdfs/星桥咖啡馆 2026 春季运营备忘录.pdf"
+      ],
+      "expected_answer": "现任店长是孟雪宁。例会通常在每周一上午9:30，于二楼靠窗的蓝色会议桌举行；节假日顺延到周二上午10:00。",
+      "filters": {
+        "collection": "default"
+      }
+    },
+    {
+      "query": "海盐桂花拿铁售价多少，桂花蜜库存低于多少瓶时需要补货？",
+      "expected_chunk_ids": [
+        "57ca6362ffe3d558bf6560327c845c5e308bbde98660a4ac594b5a92b6d38c18_0000_b1573749"
+      ],
+      "expected_sources": [
+        "pdfs/星桥咖啡馆 2026 春季运营备忘录.pdf"
+      ],
+      "expected_answer": "海盐桂花拿铁售价36元；桂花蜜库存低于3瓶时，需要在当天18:00前提交补货申请。",
+      "filters": {
+        "collection": "default"
+      }
+    },
+    {
+      "query": "代号Y26的咖啡豆建议萃取参数是什么？",
+      "expected_chunk_ids": [
+        "57ca6362ffe3d558bf6560327c845c5e308bbde98660a4ac594b5a92b6d38c18_0001_6a83e951"
+      ],
+      "expected_sources": [
+        "pdfs/星桥咖啡馆 2026 春季运营备忘录.pdf"
+      ],
+      "expected_answer": "粉量18克、液重40克，萃取时间28秒到31秒。",
+      "filters": {
+        "collection": "default"
+      }
+    },
+    {
+      "query": "Linea PB压力不稳定时应先检查什么，正常压力范围是多少？",
+      "expected_chunk_ids": [
+        "57ca6362ffe3d558bf6560327c845c5e308bbde98660a4ac594b5a92b6d38c18_0001_6a83e951"
+      ],
+      "expected_sources": [
+        "pdfs/星桥咖啡馆 2026 春季运营备忘录.pdf"
+      ],
+      "expected_answer": "应先检查净水器压力表，正常压力范围为2.5到4.0 bar。",
+      "filters": {
+        "collection": "default"
+      }
+    },
+    {
+      "query": "2026年5月旧港夜读会在什么时候举行，最多容纳多少人？",
+      "expected_chunk_ids": [
+        "57ca6362ffe3d558bf6560327c845c5e308bbde98660a4ac594b5a92b6d38c18_0002_a4a36885"
+      ],
+      "expected_sources": [
+        "pdfs/星桥咖啡馆 2026 春季运营备忘录.pdf"
+      ],
+      "expected_answer": "活动计划于5月17日19:00到20:30举行，最多容纳22名顾客。",
+      "filters": {
+        "collection": "default"
+      }
+    },
+    {
+      "query": "星桥小票夹的积分兑换规则和新人券规则是什么？",
+      "expected_chunk_ids": [
+        "57ca6362ffe3d558bf6560327c845c5e308bbde98660a4ac594b5a92b6d38c18_0003_a94754b7"
+      ],
+      "expected_sources": [
+        "pdfs/星桥咖啡馆 2026 春季运营备忘录.pdf"
+      ],
+      "expected_answer": "每消费1元积1分，满300分可兑换任意中杯饮品一杯，季节限定饮品除外；新会员获得一张有效期14天的8折券，且不能与生日券叠加。",
+      "filters": {
+        "collection": "default"
+      }
+    }
+  ]
+}
