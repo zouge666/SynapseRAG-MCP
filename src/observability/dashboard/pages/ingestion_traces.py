@@ -1,5 +1,8 @@
 from __future__ import annotations
 
+import html
+
+from observability.dashboard.components import search_box
 from observability.dashboard.services.trace_service import TraceService
 
 
@@ -8,16 +11,36 @@ def render() -> None:
 
     st.title("Ingestion Traces")
     service = TraceService()
-    traces = service.ingestion_traces()
-    if not traces:
+    if not service.ingestion_traces():
         st.info("No ingestion traces found.")
         return
 
+    with st.container(border=True):
+        st.markdown("**Trace filters**")
+        pending = st.session_state.get("ingestion_traces_search")
+        match_count = len(service.search_ingestion_traces(pending)) if isinstance(pending, str) and pending else -1
+        keyword = search_box(
+            key="ingestion_traces_search",
+            label="Search",
+            placeholder="Filter by file, collection, or status…",
+            match_count=match_count,
+        )
+        traces = service.search_ingestion_traces(keyword)
+        if keyword and not traces:
+            st.markdown(
+                f'<span style="color:#d93025;font-weight:600">✕ No traces match “{html.escape(keyword)}” — clear the search to see all traces.</span>',
+                unsafe_allow_html=True,
+            )
+        elif keyword:
+            st.caption(f"{len(traces)} matching trace{'s' if len(traces) != 1 else ''}")
+        labels = [_trace_label(trace) for trace in traces]
+        selected_label = st.selectbox("Trace", labels) if traces else None
+    if not traces:
+        return
+
     st.dataframe(_trace_rows(traces), hide_index=True, use_container_width=True)
-    labels = [_trace_label(trace) for trace in traces]
-    selected_label = st.sidebar.selectbox("Trace", labels)
     trace = traces[labels.index(selected_label)]
-    summary = service.summaries("ingestion")[labels.index(selected_label)]
+    summary = service.summary_for_trace(trace)
     left, middle, right = st.columns(3)
     left.metric("Status", summary.status)
     middle.metric("Elapsed ms", summary.total_elapsed_ms)

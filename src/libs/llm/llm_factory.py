@@ -72,22 +72,18 @@ class LLMFactory:
             from libs.llm.openai_llm import OpenAILLM
 
             LLMFactory.register_provider("openai", OpenAILLM)
-        elif provider == "azure":
-            from libs.llm.azure_llm import AzureOpenAILLM
+        elif provider == "anthropic":
+            from libs.llm.anthropic_llm import AnthropicLLM
 
-            LLMFactory.register_provider("azure", AzureOpenAILLM)
-        elif provider == "deepseek":
-            from libs.llm.deepseek_llm import DeepSeekLLM
-
-            LLMFactory.register_provider("deepseek", DeepSeekLLM)
-        elif provider == "ollama":
-            from libs.llm.ollama_llm import OllamaLLM
-
-            LLMFactory.register_provider("ollama", OllamaLLM)
+            LLMFactory.register_provider("anthropic", AnthropicLLM)
 
     @staticmethod
     def _load_builtin_vision_provider(provider: str) -> None:
-        if provider == "azure":
-            from libs.llm.azure_vision_llm import AzureVisionLLM
+        if provider == "openai":
+            from libs.llm.openai_vision_llm import OpenAIVisionLLM
 
-            LLMFactory.register_vision_provider("azure", AzureVisionLLM)
+            LLMFactory.register_vision_provider("openai", OpenAIVisionLLM)
+        elif provider == "anthropic":
+            from libs.llm.anthropic_vision_llm import AnthropicVisionLLM
+
+            LLMFactory.register_vision_provider("anthropic", AnthropicVisionLLM)

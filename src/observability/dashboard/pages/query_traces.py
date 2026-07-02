@@ -1,5 +1,8 @@
 from __future__ import annotations
 
+import html
+
+from observability.dashboard.components import search_box
 from observability.dashboard.services.trace_service import TraceService
 
 
@@ -8,15 +11,32 @@ def render() -> None:
 
     st.title("Query Traces")
     service = TraceService()
-    keyword = st.sidebar.text_input("Search")
-    traces = service.search_query_traces(keyword)
+    with st.container(border=True):
+        st.markdown("**Trace filters**")
+        pending = st.session_state.get("query_traces_search")
+        match_count = len(service.search_query_traces(pending)) if isinstance(pending, str) and pending else -1
+        keyword = search_box(
+            key="query_traces_search",
+            label="Search",
+            placeholder="Filter traces as you type…",
+            match_count=match_count,
+        )
+        traces = service.search_query_traces(keyword)
+        if keyword and not traces:
+            st.markdown(
+                f'<span style="color:#d93025;font-weight:600">✕ No traces match “{html.escape(keyword)}” — clear the search to see all traces.</span>',
+                unsafe_allow_html=True,
+            )
+        elif keyword:
+            st.caption(f"{len(traces)} matching trace{'s' if len(traces) != 1 else ''}")
+        labels = [_trace_label(trace) for trace in traces]
+        selected_label = st.selectbox("Trace", labels) if traces else None
     if not traces:
-        st.info("No query traces found.")
+        if not keyword:
+            st.info("No query traces found.")
         return
 
     st.dataframe(_trace_rows(traces), hide_index=True, use_container_width=True)
-    labels = [_trace_label(trace) for trace in traces]
-    selected_label = st.sidebar.selectbox("Trace", labels)
     trace = traces[labels.index(selected_label)]
     summary = service.summary_for_trace(trace)
     left, middle, right = st.columns(3)

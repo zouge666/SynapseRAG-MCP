@@ -47,10 +47,6 @@ class EmbeddingFactory:
             from libs.embedding.openai_embedding import OpenAIEmbedding
 
             EmbeddingFactory.register_provider("openai", OpenAIEmbedding)
-        elif provider == "azure":
-            from libs.embedding.azure_embedding import AzureOpenAIEmbedding
-
-            EmbeddingFactory.register_provider("azure", AzureOpenAIEmbedding)
         elif provider == "ollama":
             from libs.embedding.ollama_embedding import OllamaEmbedding
 

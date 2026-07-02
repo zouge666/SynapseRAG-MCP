@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+import os
+import re
 from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Any
@@ -9,6 +11,63 @@ import yaml
 
 class SettingsError(ValueError):
     pass
+
+
+_ENV_FILE = Path(__file__).resolve().parents[2] / ".env"
+_ENV_LINE = re.compile(r"^\s*([A-Za-z_][A-Za-z0-9_]*)\s*=\s*(.*)$")
+_ENV_REF = re.compile(r"\$\{([A-Za-z_][A-Za-z0-9_]*)(?::-(.*?))?\}")
+_ENV_TEMPLATE = """\
+# SynapseRAG local environment. This file is git-ignored; keep real keys here only.
+# Uncomment and fill in the values you want to override.
+
+# API_KEY=sk-your-real-key
+
+# LLM_MODEL=deepseek-v4-flash
+# LLM_BASE_URL=https://api.deepseek.com
+
+# EMBEDDING_MODEL=local-hash
+# EMBEDDING_BASE_URL=https://api.openai.com/v1
+# EMBEDDING_API_KEY=sk-your-real-key
+"""
+
+
+def _ensure_dotenv(path: Path = _ENV_FILE) -> None:
+    if path.is_file():
+        return
+    try:
+        path.write_text(_ENV_TEMPLATE, encoding="utf-8")
+    except OSError:
+        return
+
+
+def _load_dotenv(path: Path = _ENV_FILE) -> None:
+    _ensure_dotenv(path)
+    if not path.is_file():
+        return
+    for line in path.read_text(encoding="utf-8").splitlines():
+        if not line.strip() or line.lstrip().startswith("#"):
+            continue
+        match = _ENV_LINE.match(line)
+        if match:
+            os.environ.setdefault(match.group(1), match.group(2).strip().strip('"').strip("'"))
+
+
+def _expand_env_vars(value: Any) -> Any:
+    if isinstance(value, str):
+        return _ENV_REF.sub(_resolve_env_ref, value)
+    if isinstance(value, dict):
+        return {key: _expand_env_vars(item) for key, item in value.items()}
+    if isinstance(value, list):
+        return [_expand_env_vars(item) for item in value]
+    return value
+
+
+def _resolve_env_ref(match: re.Match[str]) -> str:
+    value = os.environ.get(match.group(1))
+    if value:
+        return value
+    default = match.group(2)
+    return default if default is not None else ""
 
 
 @dataclass(frozen=True)
@@ -22,9 +81,6 @@ class LLMSettings:
     provider: str
     model: str
     api_key: str = ""
-    azure_endpoint: str = ""
-    api_version: str = ""
-    deployment_name: str = ""
     base_url: str = ""
     max_image_size: int = 2048
 
@@ -35,9 +91,6 @@ class EmbeddingSettings:
     model: str
     dimensions: int | None = None
     api_key: str = ""
-    azure_endpoint: str = ""
-    api_version: str = ""
-    deployment_name: str = ""
     base_url: str = ""
 
 
@@ -128,13 +181,14 @@ def load_settings(path: str = "config/settings.yaml") -> Settings:
     if not config_path.exists():
         raise SettingsError(f"settings file not found: {path}")
 
+    _load_dotenv()
     with config_path.open("r", encoding="utf-8") as file:
         raw = yaml.safe_load(file) or {}
 
     if not isinstance(raw, dict):
         raise SettingsError("settings root must be a mapping")
 
-    settings = _parse_settings(raw)
+    settings = _parse_settings(_expand_env_vars(raw))
     validate_settings(settings)
     return settings
 
@@ -221,9 +275,6 @@ def _parse_settings(raw: dict[str, Any]) -> Settings:
             provider=_text(llm, "provider"),
             model=_text(llm, "model"),
             api_key=_text(llm, "api_key", ""),
-            azure_endpoint=_text(llm, "azure_endpoint", ""),
-            api_version=_text(llm, "api_version", ""),
-            deployment_name=_text(llm, "deployment_name", ""),
             base_url=_text(llm, "base_url", ""),
             max_image_size=_integer(llm, "max_image_size", 2048),
         ),
@@ -232,9 +283,6 @@ def _parse_settings(raw: dict[str, Any]) -> Settings:
             model=_text(embedding, "model"),
             dimensions=_optional_int(embedding, "dimensions"),
             api_key=_text(embedding, "api_key", ""),
-            azure_endpoint=_text(embedding, "azure_endpoint", ""),
-            api_version=_text(embedding, "api_version", ""),
-            deployment_name=_text(embedding, "deployment_name", ""),
             base_url=_text(embedding, "base_url", ""),
         ),
         vector_store=VectorStoreSettings(
@@ -280,9 +328,6 @@ def _parse_optional_llm_settings(section: dict[str, Any] | None) -> LLMSettings 
         provider=_text(section, "provider"),
         model=_text(section, "model"),
         api_key=_text(section, "api_key", ""),
-        azure_endpoint=_text(section, "azure_endpoint", ""),
-        api_version=_text(section, "api_version", ""),
-        deployment_name=_text(section, "deployment_name", ""),
         base_url=_text(section, "base_url", ""),
         max_image_size=_integer(section, "max_image_size", 2048),
     )

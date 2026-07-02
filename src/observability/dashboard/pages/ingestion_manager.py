@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import re
 import tempfile
 from pathlib import Path
 from typing import Any, Callable
@@ -9,33 +10,68 @@ from observability.dashboard.services.data_service import DataService
 from observability.logger import write_trace
 
 
+NEW_COLLECTION = "__create_new__"
+COLLECTION_NAME = re.compile(r"^[A-Za-z0-9][A-Za-z0-9_.-]{0,63}$")
+
+
 def render() -> None:
     import streamlit as st
 
     st.title("Ingestion Manager")
     service = DataService()
     collections = service.list_collections()
-    collection = st.selectbox("Collection", collections)
-    uploaded_file = st.file_uploader("File", type=["pdf"])
-    force = st.checkbox("Force reprocess", value=False)
 
-    if uploaded_file is not None and st.button("Ingest", type="primary"):
-        progress = st.progress(0.0)
-        status = st.empty()
-        try:
-            result = _run_ingestion(uploaded_file, collection, force, service.settings, progress, status)
-        except Exception as error:
-            st.error(str(error))
+    with st.container(border=True):
+        st.markdown("**Upload & Ingest**")
+        notice = st.session_state.pop("ingestion_notice", None)
+        if notice:
+            level, message = notice
+            getattr(st, level, st.info)(message)
+        selection = st.selectbox(
+            "Collection",
+            [*collections, NEW_COLLECTION],
+            format_func=lambda value: "＋ Create a new collection…" if value == NEW_COLLECTION else value,
+        )
+        new_name = ""
+        if selection == NEW_COLLECTION:
+            new_name = st.text_input("New collection name", placeholder="e.g. product_manuals")
+            collection = new_name.strip()
+            if collection and not _valid_collection_name(collection):
+                st.error("Collection names must start with a letter or digit and may only contain letters, digits, dots, dashes and underscores (max 64 chars).")
+                collection = ""
+            elif collection:
+                st.caption(f"The collection `{collection}` is created automatically once the first file is ingested.")
         else:
-            if result.get("skipped") or result.get("status") == "skipped":
-                st.info(
-                    "文件内容与已入库版本一致，因此没有重复处理。"
-                    "现有索引可直接用于查询；如需重新解析，请勾选 Force reprocess 后再次摄取。"
-                )
+            collection = selection
+        uploaded_file = st.file_uploader("File", type=["pdf"])
+        force = st.checkbox("Force reprocess", value=False)
+        ready = uploaded_file is not None and bool(collection)
+        if st.button("Ingest", type="primary", disabled=not ready):
+            progress = st.progress(0.0)
+            status = st.empty()
+            try:
+                result = _run_ingestion(uploaded_file, collection, force, service.settings, progress, status)
+            except Exception as error:
+                st.error(str(error))
             else:
-                st.success("摄取完成：文件已解析、切分并写入当前 Collection。")
-            with st.expander("查看处理详情"):
-                st.json(result, expanded=False)
+                if result.get("skipped") or result.get("status") == "skipped":
+                    st.session_state["ingestion_notice"] = (
+                        "info",
+                        "The file content matches the version already in the index, so it was not reprocessed. "
+                        "The existing index can be queried directly; tick Force reprocess to parse it again.",
+                    )
+                else:
+                    st.session_state["ingestion_notice"] = (
+                        "success",
+                        f"Ingestion complete: the file was parsed, chunked and written to collection `{collection}`.",
+                    )
+                st.session_state["ingestion_last_result"] = result
+                st.rerun()
+
+    last_result = st.session_state.pop("ingestion_last_result", None)
+    if last_result:
+        with st.expander("Processing details"):
+            st.json(last_result, expanded=False)
 
     st.subheader("Documents")
     documents = service.list_documents(collection)
@@ -50,6 +86,10 @@ def render() -> None:
             result = _delete_document(service, document["source_path"], collection)
             st.toast(f"Deleted {result['source_path']}")
             st.rerun()
+
+
+def _valid_collection_name(name: str) -> bool:
+    return bool(COLLECTION_NAME.match(name))
 
 
 def _run_ingestion(
@@ -97,17 +137,17 @@ def _progress_callback(progress_widget: Any, status_widget: Any) -> Callable[[st
 
 def _progress_message(stage: str, current: int, total: int) -> str:
     if stage == "skipped":
-        return f"检测到相同文件，已跳过重复摄取（{current}/{total}）"
+        return f"Detected an identical file, skipped duplicate ingestion ({current}/{total})"
     labels = {
-        "integrity": "正在检查文件是否已处理",
-        "load": "正在读取 PDF 内容",
-        "image_store": "正在保存文档图片",
-        "split": "正在切分文本",
-        "transform": "正在整理文本块",
-        "encode": "正在生成向量",
-        "store": "正在写入索引",
+        "integrity": "Checking whether the file was processed before",
+        "load": "Reading PDF content",
+        "image_store": "Saving document images",
+        "split": "Splitting text",
+        "transform": "Refining chunks",
+        "encode": "Generating embeddings",
+        "store": "Writing to the index",
     }
-    return f"{labels.get(stage, stage)}（{current}/{total}）"
+    return f"{labels.get(stage, stage)} ({current}/{total})"
 
 
 def _delete_document(service: DataService, source_path: str, collection: str) -> dict[str, Any]:

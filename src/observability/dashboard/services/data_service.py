@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+import json
+import re
 from pathlib import Path
 from typing import Any
 
@@ -17,8 +19,45 @@ class DataService:
         self.document_manager = document_manager or self._document_manager(self.settings)
 
     def list_collections(self) -> list[str]:
-        collection = self.settings.vector_store.collection or "default"
-        return [collection]
+        store = getattr(self.document_manager, "chroma_store", None)
+        bound = getattr(store, "collection", None)
+        default = bound if isinstance(bound, str) and bound else (self.settings.vector_store.collection or "default")
+        names = {default}
+        get_records = getattr(store, "get_by_metadata", None)
+        if callable(get_records):
+            try:
+                records = get_records({})
+            except Exception:
+                records = []
+            for record in records:
+                metadata = getattr(record, "metadata", None)
+                if isinstance(metadata, dict):
+                    name = metadata.get("collection")
+                    if isinstance(name, str) and name.strip():
+                        names.add(name.strip())
+        return sorted(names)
+
+    def collection_dimensions(self, collection: str) -> int | None:
+        persist_path = getattr(self.settings.vector_store, "persist_path", "")
+        if not isinstance(persist_path, str) or not persist_path:
+            return None
+        safe_name = re.sub(r"[^a-zA-Z0-9_.-]+", "_", collection).strip("._") or "default"
+        store_path = Path(persist_path) / f"{safe_name}.json"
+        if not store_path.is_file():
+            return None
+        try:
+            with store_path.open("r", encoding="utf-8") as file:
+                data = json.load(file)
+        except (OSError, json.JSONDecodeError):
+            return None
+        records = data.get("records") if isinstance(data, dict) else None
+        if not isinstance(records, list):
+            return None
+        for record in records:
+            vector = record.get("vector") if isinstance(record, dict) else None
+            if isinstance(vector, list) and vector:
+                return len(vector)
+        return None
 
     def list_documents(self, collection: str | None = None) -> list[dict[str, Any]]:
         return [document.to_dict() for document in self.document_manager.list_documents(collection or self._default_collection())]

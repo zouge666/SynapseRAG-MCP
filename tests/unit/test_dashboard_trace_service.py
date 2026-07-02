@@ -61,6 +61,21 @@ def test_trace_service_builds_stage_and_waterfall_rows(tmp_path: Path) -> None:
     assert _stage_rows(waterfall)[0] == {"stage": "load", "elapsed_ms": 1.0, "method": "pdf_loader"}
 
 
+def test_search_ingestion_traces_matches_source_collection_and_status(tmp_path: Path) -> None:
+    path = tmp_path / "traces.jsonl"
+    first = ingestion_trace("trace-1", "docs/a.pdf", "2026-06-01T10:00:00+00:00", 10.0)
+    second = ingestion_trace("trace-2", "reports/b.pdf", "2026-06-02T10:00:00+00:00", 20.0)
+    second["status"] = "error"
+    write_jsonl(path, [first, second])
+    service = TraceService(path)
+
+    assert [trace["trace_id"] for trace in service.search_ingestion_traces("reports")] == ["trace-2"]
+    assert [trace["trace_id"] for trace in service.search_ingestion_traces("A.PDF")] == ["trace-1"]
+    assert [trace["trace_id"] for trace in service.search_ingestion_traces("error")] == ["trace-2"]
+    assert len(service.search_ingestion_traces("")) == 2
+    assert service.search_ingestion_traces("no-such-file") == []
+
+
 def test_ingestion_trace_page_helpers_format_rows_and_labels() -> None:
     trace = ingestion_trace("trace-1", "docs/a.pdf", "2026-06-01T10:00:00+00:00", 10.0)
 

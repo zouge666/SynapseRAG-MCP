@@ -1,0 +1,146 @@
+<!doctype html>
+<html>
+<head>
+<meta charset="utf-8"/>
+<style>
+  html, body { margin: 0; padding: 0; background: transparent; }
+  body { font-family: "Source Sans Pro", -apple-system, "Segoe UI", Roboto, "Helvetica Neue", sans-serif; }
+  #label {
+    display: block;
+    font-size: 0.875rem;
+    margin-bottom: 0.4rem;
+    color: inherit;
+  }
+  .wrap { position: relative; }
+  #box {
+    width: 100%;
+    box-sizing: border-box;
+    padding: 0.5rem 2.1rem 0.5rem 0.75rem;
+    border: 1px solid rgba(128, 128, 128, 0.35);
+    border-radius: 0.5rem;
+    font-size: 1rem;
+    line-height: 1.4;
+    color: inherit;
+    background: transparent;
+    outline: none;
+    transition: border-color 0.12s ease, box-shadow 0.12s ease;
+  }
+  #box::placeholder { color: rgba(128, 128, 128, 0.65); }
+  #box:focus { border-color: #ff4b4b; box-shadow: 0 0 0 1px #ff4b4b; }
+  .wrap.no-match #box { border-color: #d93025; box-shadow: 0 0 0 1px #d93025; }
+  #clear {
+    position: absolute;
+    right: 0.3rem;
+    top: 50%;
+    transform: translateY(-50%);
+    display: none;
+    align-items: center;
+    justify-content: center;
+    width: 1.5rem;
+    height: 1.5rem;
+    border: none;
+    border-radius: 50%;
+    background: transparent;
+    color: rgba(128, 128, 128, 0.9);
+    font-size: 0.95rem;
+    line-height: 1;
+    cursor: pointer;
+    padding: 0;
+  }
+  #clear:hover { color: #d93025; background: rgba(128, 128, 128, 0.15); }
+  .wrap.has-text #clear { display: inline-flex; }
+</style>
+</head>
+<body>
+<label id="label" for="box"></label>
+<div class="wrap" id="wrap">
+  <input id="box" type="text" autocomplete="off" autocorrect="off" autocapitalize="off" spellcheck="false"/>
+  <button id="clear" type="button" title="Clear search" aria-label="Clear search" tabindex="-1">&#10005;</button>
+</div>
+<script>
+(function () {
+  var label = document.getElementById("label");
+  var wrap = document.getElementById("wrap");
+  var box = document.getElementById("box");
+  var clear = document.getElementById("clear");
+  var debounce = null;
+  var synced = false;
+  var renderSeen = false;
+
+  function send(value) {
+    window.parent.postMessage({ isStreamlitMessage: true, type: "streamlit:setComponentValue", value: value, dataType: "json" }, "*");
+  }
+  function sendHeight() {
+    window.parent.postMessage({ isStreamlitMessage: true, type: "streamlit:setFrameHeight", height: document.body.offsetHeight + 2 }, "*");
+  }
+  function scheduleSend(value) {
+    if (debounce) window.clearTimeout(debounce);
+    debounce = window.setTimeout(function () { debounce = null; send(value); }, 180);
+  }
+  function refresh() {
+    wrap.classList.toggle("has-text", box.value.length > 0);
+  }
+
+  box.addEventListener("input", function () {
+    refresh();
+    scheduleSend(box.value);
+  });
+  box.addEventListener("keydown", function (event) {
+    if (event.key === "Enter") {
+      if (debounce) { window.clearTimeout(debounce); debounce = null; }
+      send(box.value);
+    } else if (event.key === "Escape") {
+      box.value = "";
+      refresh();
+      send("");
+    }
+  });
+  clear.addEventListener("click", function () {
+    box.value = "";
+    refresh();
+    send("");
+    box.focus();
+  });
+
+  window.addEventListener("message", function (event) {
+    var data = event.data;
+    if (!data || data.type !== "streamlit:render") return;
+    renderSeen = true;
+    var args = data.args || {};
+    if (typeof args.label === "string") {
+      label.textContent = args.label;
+      label.style.display = args.label ? "block" : "none";
+    }
+    if (typeof args.placeholder === "string") box.placeholder = args.placeholder;
+    if (data.disabled === true) box.setAttribute("disabled", ""); else box.removeAttribute("disabled");
+    if (data.theme) {
+      if (data.theme.font) document.body.style.fontFamily = data.theme.font;
+      if (data.theme.textColor) document.body.style.color = data.theme.textColor;
+    }
+    wrap.classList.toggle("no-match", box.value.length > 0 && args.match_count === 0);
+    if (!synced) {
+      synced = true;
+      send(box.value);
+    }
+    sendHeight();
+  });
+
+  refresh();
+  function sendReady() {
+    window.parent.postMessage({ isStreamlitMessage: true, type: "streamlit:componentReady", apiVersion: 1 }, "*");
+  }
+  sendReady();
+  sendHeight();
+  var readyTimer = window.setInterval(function () {
+    if (renderSeen) {
+      window.clearInterval(readyTimer);
+      return;
+    }
+    sendReady();
+    sendHeight();
+  }, 300);
+  window.setTimeout(function () { window.clearInterval(readyTimer); }, 15000);
+})();
+</script>
+</body>
+</html>

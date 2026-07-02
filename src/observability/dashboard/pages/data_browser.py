@@ -9,15 +9,17 @@ def render() -> None:
     st.title("Data Browser")
     service = DataService()
     collections = service.list_collections()
-    collection = st.sidebar.selectbox("Collection", collections)
-    documents = service.list_documents(collection)
+    with st.container(border=True):
+        st.markdown("**Browse filters**")
+        collection = st.selectbox("Collection", collections)
+        documents = service.list_documents(collection)
+        labels = [_document_label(document) for document in documents]
+        selected_label = st.selectbox("Document", labels) if documents else None
     if not documents:
         st.info("No ingested documents found.")
         return
 
     st.dataframe(_document_rows(documents), hide_index=True, use_container_width=True)
-    labels = [_document_label(document) for document in documents]
-    selected_label = st.sidebar.selectbox("Document", labels)
     selected_document = documents[labels.index(selected_label)]
     detail = service.get_document_detail(selected_document["doc_id"])
     document = detail["document"]

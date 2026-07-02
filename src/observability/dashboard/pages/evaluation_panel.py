@@ -23,11 +23,15 @@ def render() -> None:
         return
 
     configured_backends = _configured_backends(settings)
-    selected_backends = st.sidebar.multiselect("Backends", configured_backends, default=configured_backends)
-    test_set_path = st.sidebar.text_input("Golden test set", DEFAULT_TEST_SET)
-    top_k = st.sidebar.number_input("Top K", min_value=1, value=_default_top_k(settings), step=1)
+    with st.container(border=True):
+        st.markdown("**Run configuration**")
+        selected_backends = st.multiselect("Backends", configured_backends, default=configured_backends)
+        path_column, top_k_column = st.columns([3, 1])
+        test_set_path = path_column.text_input("Golden test set", DEFAULT_TEST_SET)
+        top_k = top_k_column.number_input("Top K", min_value=1, value=_default_top_k(settings), step=1)
+        run_clicked = st.button("Run Evaluation", type="primary")
 
-    if st.sidebar.button("Run Evaluation"):
+    if run_clicked:
         try:
             report = run_dashboard_evaluation(settings, selected_backends, test_set_path, int(top_k))
         except Exception as error:

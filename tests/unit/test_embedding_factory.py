@@ -11,6 +11,37 @@ class FakeEmbedding(BaseEmbedding):
         return [[float(len(text)), float(index)] for index, text in enumerate(texts)]
 
 
+PROJECT_CONFIG = """
+app:
+  name: synapserag-mcp
+llm:
+  provider: openai
+  model: gpt-4o
+embedding:
+  provider: local
+  model: local-hash
+  dimensions: 128
+vector_store:
+  backend: chroma
+  persist_path: data/db/chroma
+retrieval:
+  sparse_backend: bm25
+  fusion_algorithm: rrf
+  top_k_dense: 20
+  top_k_sparse: 20
+  top_k_final: 5
+rerank:
+  enabled: false
+  backend: none
+evaluation:
+  enabled: false
+  backends: []
+observability:
+  log_path: logs/app.log
+  trace_path: logs/traces.jsonl
+"""
+
+
 @pytest.fixture(autouse=True)
 def reset_factory() -> None:
     EmbeddingFactory.unregister_provider("fake")
@@ -33,9 +64,11 @@ def test_factory_creates_registered_provider_from_embedding_settings() -> None:
     assert embedding.embed(["hi", "there"]) == [[2.0, 0.0], [5.0, 1.0]]
 
 
-def test_factory_creates_registered_provider_from_project_settings() -> None:
+def test_factory_creates_registered_provider_from_project_settings(tmp_path) -> None:
     EmbeddingFactory.register_provider("local", FakeEmbedding)
-    settings = load_settings("config/settings.yaml")
+    config_path = tmp_path / "settings.yaml"
+    config_path.write_text(PROJECT_CONFIG, encoding="utf-8")
+    settings = load_settings(str(config_path))
 
     embedding = EmbeddingFactory.create(settings)
 

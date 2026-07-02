@@ -1,26 +1,25 @@
 app:
   name: synapserag-mcp
   environment: local
-
 llm:
   provider: openai
-  model: gpt-4o
-
+  model: ${LLM_MODEL}
+  base_url: ${LLM_BASE_URL}
+  api_key: ${API_KEY}
 embedding:
-  provider: local
-  model: local-hash
-  dimensions: 128
-
+  provider: ollama
+  model: nomic-embed-text:latest
+  dimensions: 768
+  base_url: http://localhost:11434
+  api_key: ${EMBEDDING_API_KEY}
 vector_store:
   backend: chroma
   persist_path: data/db/chroma
   collection: default
-
 splitter:
   provider: recursive
   chunk_size: 1000
   chunk_overlap: 200
-
 ingestion:
   chunk_refiner:
     use_llm: false
@@ -30,25 +29,21 @@ ingestion:
   image_captioner:
     enabled: false
     prompt_path: config/prompts/image_captioning.txt
-
 retrieval:
   sparse_backend: bm25
   fusion_algorithm: rrf
   top_k_dense: 20
   top_k_sparse: 20
   top_k_final: 5
-
 rerank:
-  enabled: false
-  backend: none
+  enabled: true
+  backend: llm
   model: ""
   top_m: 30
-
 evaluation:
   enabled: false
   backends:
     - custom_metrics
-
 observability:
   log_path: logs/app.log
   trace_path: logs/traces.jsonl

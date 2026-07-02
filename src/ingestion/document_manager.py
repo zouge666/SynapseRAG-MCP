@@ -92,8 +92,11 @@ class DocumentManager:
 
     def list_documents(self, collection: str | None = None) -> list[DocumentInfo]:
         active_collection = self._collection(collection)
+        bound_collection = self._collection(None)
         records = self._vector_records(active_collection)
         integrity_by_source = self._integrity_by_source()
+        attributed_sources = {self._source_path(getattr(record, "metadata", {}) or {}) for record in self._all_vector_records()}
+        attributed_sources.discard("")
         grouped: dict[str, dict[str, Any]] = {}
         for record in records:
             metadata = dict(getattr(record, "metadata", {}) or {})
@@ -119,6 +122,8 @@ class DocumentManager:
                 item["doc_id"] = self._document_id(metadata, source_path)
         for source_path, record in integrity_by_source.items():
             if source_path not in grouped:
+                if source_path in attributed_sources or active_collection != bound_collection:
+                    continue
                 grouped[source_path] = {
                     "doc_id": record.get("file_hash") or source_path,
                     "source_path": source_path,
@@ -193,14 +198,23 @@ class DocumentManager:
 
     def _vector_records(self, collection: str) -> list[Any]:
         store_collection = str(getattr(self.chroma_store, "collection", collection) or collection)
-        if store_collection != collection:
-            return []
+        return [record for record in self._all_vector_records() if self._record_collection(record, store_collection) == collection]
+
+    def _all_vector_records(self) -> list[Any]:
         if hasattr(self.chroma_store, "get_by_metadata"):
             return list(self.chroma_store.get_by_metadata({}))
-        records = getattr(self.chroma_store, "records", {})
-        if isinstance(records, dict):
-            return list(records.values())
-        return list(records or [])
+        raw_records = getattr(self.chroma_store, "records", {})
+        if isinstance(raw_records, dict):
+            return list(raw_records.values())
+        return list(raw_records or [])
+
+    def _record_collection(self, record: Any, store_collection: str) -> str:
+        metadata = getattr(record, "metadata", None)
+        if isinstance(metadata, dict):
+            name = metadata.get("collection")
+            if isinstance(name, str) and name:
+                return name
+        return store_collection
 
     def _records_for_source(self, source_path: str, collection: str) -> list[Any]:
         return [record for record in self._vector_records(collection) if self._source_path(getattr(record, "metadata", {}) or {}) == source_path]

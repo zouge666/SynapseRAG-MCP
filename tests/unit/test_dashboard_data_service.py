@@ -1,4 +1,5 @@
 from pathlib import Path
+from types import SimpleNamespace
 
 from core import ChunkRecord
 from core.settings import VectorStoreSettings, load_settings
@@ -80,3 +81,72 @@ def test_data_service_returns_document_detail_chunks_and_images(tmp_path: Path) 
     assert [image["image_id"] for image in images] == ["img-1"]
     assert image_exists(images[0]) is True
     assert image_exists({"file_path": "missing.png"}) is False
+
+
+def test_data_service_lists_collections_from_record_metadata(tmp_path: Path) -> None:
+    service, _, _ = make_service(tmp_path)
+
+    assert service.list_collections() == ["docs"]
+
+    service.document_manager.chroma_store.upsert(
+        [
+            VectorRecord(
+                id="vec-9",
+                vector=[1.0, 1.0],
+                text="Gamma",
+                metadata={"source_path": str(tmp_path / "other.pdf"), "file_hash": "hash-b", "chunk_id": "chunk-9", "chunk_index": 0, "collection": "archive"},
+            )
+        ]
+    )
+
+    assert service.list_collections() == ["archive", "docs"]
+
+
+def test_data_service_lists_documents_for_tagged_collection(tmp_path: Path) -> None:
+    service, source_path, _ = make_service(tmp_path)
+    tagged_source = str(tmp_path / "other.pdf")
+    service.document_manager.chroma_store.upsert(
+        [
+            VectorRecord(
+                id="vec-9",
+                vector=[1.0, 1.0],
+                text="Gamma",
+                metadata={"source_path": tagged_source, "file_hash": "hash-b", "chunk_id": "chunk-9", "chunk_index": 0, "collection": "archive"},
+            )
+        ]
+    )
+
+    archived = service.list_documents("archive")
+    default = service.list_documents("docs")
+
+    assert [document["source_path"] for document in archived] == [tagged_source]
+    assert archived[0]["collection"] == "archive"
+    assert [document["source_path"] for document in default] == [source_path]
+
+
+def make_dimension_service(tmp_path: Path) -> DataService:
+    settings = SimpleNamespace(vector_store=SimpleNamespace(persist_path=str(tmp_path / "chroma")))
+    return DataService(settings=settings, document_manager=object())
+
+
+def test_collection_dimensions_reads_stored_vector_length(tmp_path: Path) -> None:
+    store_dir = tmp_path / "chroma"
+    store_dir.mkdir()
+    (store_dir / "default.json").write_text(
+        '{"records": [{"id": "a", "vector": [0.1, 0.2, 0.3], "text": "t", "metadata": {}}]}',
+        encoding="utf-8",
+    )
+
+    assert make_dimension_service(tmp_path).collection_dimensions("default") == 3
+
+
+def test_collection_dimensions_returns_none_without_store_or_records(tmp_path: Path) -> None:
+    service = make_dimension_service(tmp_path)
+
+    assert service.collection_dimensions("missing") is None
+
+    store_dir = tmp_path / "chroma"
+    store_dir.mkdir()
+    (store_dir / "empty.json").write_text('{"records": []}', encoding="utf-8")
+
+    assert service.collection_dimensions("empty") is None

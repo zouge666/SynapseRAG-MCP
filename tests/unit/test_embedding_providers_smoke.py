@@ -3,8 +3,9 @@ from typing import Any
 import pytest
 
 from core.settings import EmbeddingSettings
-from libs.embedding.azure_embedding import AzureOpenAIEmbedding
 from libs.embedding.embedding_factory import EmbeddingFactory
+from libs.embedding.local_embedding import LocalEmbedding
+from libs.embedding.ollama_embedding import OllamaEmbedding
 from libs.embedding.openai_embedding import OpenAIEmbedding, OpenAIEmbeddingError
 
 
@@ -18,19 +19,10 @@ class FakeTransport:
         return self.response
 
 
-def test_factory_routes_openai_and_azure_embedding() -> None:
+def test_factory_routes_local_openai_and_ollama_embedding() -> None:
+    assert isinstance(EmbeddingFactory.create(EmbeddingSettings(provider="local", model="local-hash", dimensions=8)), LocalEmbedding)
     assert isinstance(EmbeddingFactory.create(EmbeddingSettings(provider="openai", model="text-embedding-3-small")), OpenAIEmbedding)
-    assert isinstance(
-        EmbeddingFactory.create(
-            EmbeddingSettings(
-                provider="azure",
-                model="text-embedding-ada-002",
-                azure_endpoint="https://example.openai.azure.com",
-                deployment_name="embeddings",
-            )
-        ),
-        AzureOpenAIEmbedding,
-    )
+    assert isinstance(EmbeddingFactory.create(EmbeddingSettings(provider="ollama", model="nomic-embed-text")), OllamaEmbedding)
 
 
 def test_openai_embed_uses_openai_embeddings_payload() -> None:
@@ -63,28 +55,20 @@ def test_openai_embed_uses_custom_base_url() -> None:
     assert transport.calls[0][0] == "https://gateway.example/v1/embeddings"
 
 
-def test_azure_embed_uses_deployment_endpoint_and_api_key_header() -> None:
-    transport = FakeTransport({"data": [{"embedding": [1]}, {"embedding": [2]}]})
-    embedding = AzureOpenAIEmbedding(
-        EmbeddingSettings(
-            provider="azure",
-            model="text-embedding-ada-002",
-            api_key="secret",
-            azure_endpoint="https://example.openai.azure.com/",
-            api_version="2024-05-01-preview",
-            deployment_name="embedding deployment",
-        ),
+def test_ollama_embed_uses_local_server_without_api_key() -> None:
+    transport = FakeTransport({"embeddings": [[0.1, 0.2]]})
+    embedding = OllamaEmbedding(
+        EmbeddingSettings(provider="ollama", model="nomic-embed-text"),
         transport=transport,
     )
 
-    result = embedding.embed(["hello", "world"])
+    result = embedding.embed(["hello"])
 
     url, headers, payload, _ = transport.calls[0]
-    assert result == [[1.0], [2.0]]
-    assert url == "https://example.openai.azure.com/openai/deployments/embedding%20deployment/embeddings?api-version=2024-05-01-preview"
-    assert headers["api-key"] == "secret"
+    assert result == [[0.1, 0.2]]
+    assert url == "http://localhost:11434/api/embed"
     assert "Authorization" not in headers
-    assert payload == {"input": ["hello", "world"]}
+    assert payload == {"model": "nomic-embed-text", "input": ["hello"]}
 
 
 def test_embed_validation_error_mentions_provider_and_error_type() -> None:

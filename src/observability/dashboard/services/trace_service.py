@@ -49,6 +49,13 @@ class TraceService:
             return traces
         return [trace for trace in traces if value in self._query_text(trace).lower()]
 
+    def search_ingestion_traces(self, keyword: str = "") -> list[dict[str, Any]]:
+        value = keyword.strip().lower()
+        traces = self.ingestion_traces()
+        if not value:
+            return traces
+        return [trace for trace in traces if value in self._ingestion_text(trace).lower()]
+
     def get_trace(self, trace_id: str) -> dict[str, Any] | None:
         for trace in self.list_traces():
             if trace.get("trace_id") == trace_id:
@@ -120,6 +127,13 @@ class TraceService:
             if isinstance(value, str):
                 return value
         return str(trace.get("trace_id", ""))
+
+    def _ingestion_text(self, trace: dict[str, Any]) -> str:
+        metadata = trace.get("metadata", {})
+        if not isinstance(metadata, dict):
+            metadata = {}
+        parts = [metadata.get("source_path", ""), metadata.get("collection", ""), trace.get("trace_id", ""), trace.get("status", "")]
+        return " ".join(str(part) for part in parts)
 
     def _read_jsonl(self) -> list[dict[str, Any]]:
         if not self.trace_path.exists():
