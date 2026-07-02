@@ -161,3 +161,32 @@ def test_session_embedding_override(base_settings, tmp_path) -> None:
 def test_session_embedding_defaults_to_local_hash(base_settings, tmp_path) -> None:
     session = SessionContext.create(base_settings, "guest", root=tmp_path)
     assert session.settings.embedding.provider == "local"
+
+
+def test_load_public_base_settings_tolerates_missing_llm_env(monkeypatch) -> None:
+    from core import settings as core_settings
+    from observability.dashboard.services.session_context import load_public_base_settings
+
+    for var in ("LLM_MODEL", "LLM_BASE_URL", "API_KEY", "EMBEDDING_API_KEY"):
+        monkeypatch.delenv(var, raising=False)
+    monkeypatch.setattr(core_settings, "_load_dotenv", lambda *args, **kwargs: None)
+
+    settings = load_public_base_settings()
+
+    assert settings.app.name == "synapserag-mcp"
+    assert settings.llm.model == "none"
+    assert settings.retrieval.top_k_final > 0
+
+
+def test_load_public_base_settings_prefers_real_values_when_present(monkeypatch) -> None:
+    from core import settings as core_settings
+    from observability.dashboard.services.session_context import load_public_base_settings
+
+    monkeypatch.setattr(core_settings, "_load_dotenv", lambda *args, **kwargs: None)
+    monkeypatch.setenv("LLM_MODEL", "deepseek-chat")
+    monkeypatch.setenv("LLM_BASE_URL", "https://api.deepseek.com/v1")
+    monkeypatch.setenv("API_KEY", "sk-test")
+
+    settings = load_public_base_settings()
+
+    assert settings.llm.model == "deepseek-chat"

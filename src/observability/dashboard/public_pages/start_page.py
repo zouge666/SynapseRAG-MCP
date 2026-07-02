@@ -1,8 +1,8 @@
 from __future__ import annotations
 
-from core.settings import EmbeddingSettings, LLMSettings, Settings, load_settings
+from core.settings import EmbeddingSettings, LLMSettings, Settings
 from observability.dashboard.public_pages.common import PRIVACY_NOTICE, owner_embedding_settings, owner_llm_settings, verify_admin_password
-from observability.dashboard.services.session_context import SessionContext
+from observability.dashboard.services.session_context import SessionContext, load_public_base_settings
 
 
 def render() -> None:
@@ -46,7 +46,11 @@ def _resolve_admin_llm(secrets_map, base: Settings) -> LLMSettings | None:
 
 
 def _start_session(st, mode: str) -> None:
-    base = load_settings("config/settings.yaml")
+    try:
+        base = load_public_base_settings()
+    except Exception:
+        st.error("Service configuration is unavailable. Please try again later.")
+        return
     llm: LLMSettings | None = None
     embedding: EmbeddingSettings | None = None
     if mode == "admin":

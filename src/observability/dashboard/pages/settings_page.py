@@ -45,7 +45,12 @@ def render() -> None:
     service = ConfigService()
     try:
         raw = service.load_raw()
-        settings = service.load()
+        if runtime.is_public():
+            from observability.dashboard.services.session_context import load_public_base_settings
+
+            settings = load_public_base_settings()
+        else:
+            settings = service.load()
     except Exception as error:
         st.error(f"Failed to load settings: {error}")
         return

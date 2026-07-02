@@ -11,7 +11,7 @@ from pathlib import Path
 from typing import Any, Callable
 from urllib.parse import urlparse
 
-from core.settings import EmbeddingSettings, LLMSettings, Settings
+from core.settings import EmbeddingSettings, LLMSettings, Settings, SettingsError, load_settings, validate_settings
 
 
 SESSIONS_ROOT = Path(tempfile.gettempdir()) / "synapserag_sessions"
@@ -22,6 +22,40 @@ SESSION_COLLECTION = "session"
 Clock = Callable[[], float]
 
 LOCAL_EMBEDDING = EmbeddingSettings(provider="local", model="local-hash", dimensions=128)
+
+_PUBLIC_PLACEHOLDERS = {
+    ("llm", "provider"): "none",
+    ("llm", "model"): "none",
+    ("embedding", "provider"): "local",
+    ("embedding", "model"): "local-hash",
+    ("rerank", "backend"): "none",
+}
+
+
+def load_public_base_settings(path: str = "config/settings.yaml") -> Settings:
+    try:
+        return load_settings(path)
+    except SettingsError:
+        pass
+    import yaml
+
+    from core import settings as core_settings
+
+    config_path = Path(path)
+    if not config_path.exists():
+        raise SettingsError(f"settings file not found: {path}")
+    core_settings._load_dotenv()
+    raw = yaml.safe_load(config_path.read_text(encoding="utf-8")) or {}
+    if not isinstance(raw, dict):
+        raise SettingsError("settings root must be a mapping")
+    raw = core_settings._expand_env_vars(raw)
+    for (section, key), placeholder in _PUBLIC_PLACEHOLDERS.items():
+        node = raw.get(section)
+        if isinstance(node, dict) and not node.get(key):
+            node[key] = placeholder
+    settings = core_settings._parse_settings(raw)
+    validate_settings(settings)
+    return settings
 
 
 def is_safe_remote_url(url: str) -> bool:
