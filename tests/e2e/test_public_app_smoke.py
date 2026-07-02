@@ -68,6 +68,10 @@ class FakeStreamlit(ModuleType):
     def warning(self, message) -> None:
         self.warnings.append(str(message))
 
+    @property
+    def sidebar(self):
+        return FakeContext(self.status_calls)
+
     def __getattr__(self, name):
         return getattr(FakeContext(self.status_calls), name)
 

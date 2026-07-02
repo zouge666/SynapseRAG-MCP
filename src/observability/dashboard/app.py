@@ -50,6 +50,22 @@ def _apply_app_styles(st) -> None:
             display: none;
         }
 
+        [data-testid="stSidebar"] [data-testid="stSidebarContent"] {
+            display: flex;
+            flex-direction: column;
+            height: 100%;
+        }
+
+        [data-testid="stSidebar"] [data-testid="stSidebarUserContent"] {
+            order: 1;
+        }
+
+        [data-testid="stSidebar"] [data-testid="stSidebarNav"] {
+            order: 2;
+            flex: 1 1 auto;
+            min-height: 0;
+        }
+
         [data-testid="stSidebarNav"] {
             padding-top: 0.35rem;
         }
@@ -66,6 +82,39 @@ def _apply_app_styles(st) -> None:
 
         [data-testid="stSidebarNav"] [data-testid="stIconMaterial"] {
             font-size: 1.42rem;
+        }
+
+        .sr-credit {
+            display: none;
+            position: fixed;
+            top: 0.62rem;
+            left: 3.6rem;
+            z-index: 999990;
+            font-size: 0.95rem;
+            line-height: 1;
+        }
+
+        .sr-sidebar-credit {
+            padding: 0.1rem 0 0.7rem;
+            font-size: 0.95rem;
+            line-height: 1;
+        }
+
+        .sr-credit a,
+        .sr-sidebar-credit a {
+            display: inline-flex;
+            align-items: center;
+            gap: 0.45rem;
+            color: inherit;
+            text-decoration: underline;
+            text-underline-offset: 0.22rem;
+        }
+
+        .sr-credit img,
+        .sr-sidebar-credit img {
+            width: 1.7rem;
+            height: 1.7rem;
+            border-radius: 50%;
         }
 
         /* Keep an icon rail visible when the native sidebar is collapsed. */
@@ -221,6 +270,8 @@ def _apply_app_styles(st) -> None:
                 max-width: 0 !important;
                 height: 0 !important;
                 transform: translateX(-100%) !important;
+                overflow: hidden !important;
+                visibility: hidden !important;
             }
 
             [data-testid="stSidebar"][aria-expanded="false"] > div:first-child {
@@ -232,8 +283,28 @@ def _apply_app_styles(st) -> None:
                 padding-left: 1rem;
                 padding-right: 1rem;
             }
+
+            .sr-credit {
+                display: block;
+            }
         }
         </style>
+        """,
+        unsafe_allow_html=True,
+    )
+    st.markdown(
+        """
+        <div class="sr-credit">
+        <a href="https://github.com/zouge666" target="_blank" rel="noopener noreferrer">produced by&nbsp;<img src="https://github.com/zouge666.png?size=64" alt="zouge666" onerror="this.style.display='none'"></a>
+        </div>
+        """,
+        unsafe_allow_html=True,
+    )
+    st.sidebar.markdown(
+        """
+        <div class="sr-sidebar-credit">
+        <a href="https://github.com/zouge666" target="_blank" rel="noopener noreferrer">produced by&nbsp;<img src="https://github.com/zouge666.png?size=64" alt="zouge666" onerror="this.style.display='none'"></a>
+        </div>
         """,
         unsafe_allow_html=True,
     )

@@ -190,3 +190,140 @@ def test_load_public_base_settings_prefers_real_values_when_present(monkeypatch)
     settings = load_public_base_settings()
 
     assert settings.llm.model == "deepseek-chat"
+
+
+def test_apply_guest_embedding_openai_replaces_and_resets_workspace(base_settings, tmp_path) -> None:
+    from observability.dashboard.services.session_context import apply_guest_embedding
+
+    session = SessionContext.create(base_settings, "guest", root=tmp_path)
+    session.paths.chroma.mkdir(parents=True, exist_ok=True)
+    marker = session.paths.chroma / "old_index.bin"
+    marker.write_text("stale")
+
+    error = apply_guest_embedding(session, "openai-compatible", "BAAI/bge-m3", "https://api.siliconflow.cn/v1", "sk-guest-emb", 1024)
+
+    assert error is None
+    assert session.settings.embedding.provider == "openai"
+    assert session.settings.embedding.model == "BAAI/bge-m3"
+    assert session.settings.embedding.dimensions == 1024
+    assert not marker.exists()
+    assert session.paths.uploads.exists()
+
+
+def test_apply_guest_embedding_rejects_unsafe_url_and_missing_key(base_settings, tmp_path) -> None:
+    from observability.dashboard.services.session_context import apply_guest_embedding
+
+    session = SessionContext.create(base_settings, "guest", root=tmp_path)
+    assert apply_guest_embedding(session, "openai-compatible", "m", "http://192.168.0.1", "sk-x", 1024) is not None
+    assert apply_guest_embedding(session, "openai-compatible", "m", "https://api.siliconflow.cn/v1", "", 1024) is not None
+    assert apply_guest_embedding(session, "openai-compatible", "", "https://api.siliconflow.cn/v1", "sk-x", 1024) is not None
+    assert session.settings.embedding.provider == "local"
+
+
+def test_apply_guest_embedding_local_keeps_workspace_when_unchanged(base_settings, tmp_path) -> None:
+    from observability.dashboard.services.session_context import apply_guest_embedding
+
+    session = SessionContext.create(base_settings, "guest", root=tmp_path)
+    session.paths.chroma.mkdir(parents=True, exist_ok=True)
+    marker = session.paths.chroma / "keep.bin"
+    marker.write_text("data")
+
+    assert apply_guest_embedding(session, "local (free hash)", "", "", "", 128) is None
+    assert marker.exists()
+    assert session.settings.embedding.provider == "local"
+
+
+def test_apply_guest_rerank_requires_llm_key(base_settings, tmp_path) -> None:
+    from observability.dashboard.services.session_context import apply_guest_rerank
+
+    session = SessionContext.create(base_settings, "guest", root=tmp_path)
+    assert apply_guest_rerank(session, "llm", 30, 5) is not None
+    assert session.settings.rerank.enabled is False
+
+
+def test_apply_guest_rerank_llm_with_key(base_settings, tmp_path) -> None:
+    from core.settings import LLMSettings
+    from observability.dashboard.services.session_context import apply_guest_rerank
+
+    session = SessionContext.create(base_settings, "guest", llm=LLMSettings(provider="openai", model="m", api_key="sk-x"), root=tmp_path)
+    assert apply_guest_rerank(session, "llm", 25, 8) is None
+    assert session.settings.rerank.enabled is True
+    assert session.settings.rerank.backend == "llm"
+    assert session.settings.rerank.top_m == 25
+    assert session.settings.retrieval.top_k_final == 8
+
+
+def test_apply_guest_rerank_none_disables(base_settings, tmp_path) -> None:
+    from observability.dashboard.services.session_context import apply_guest_rerank
+
+    session = SessionContext.create(base_settings, "guest", root=tmp_path)
+    assert apply_guest_rerank(session, "none", 30, 3) is None
+    assert session.settings.rerank.enabled is False
+    assert session.settings.retrieval.top_k_final == 3
+
+
+def test_admin_session_keeps_base_rerank_and_evaluation(base_settings, tmp_path) -> None:
+    admin = SessionContext.create(base_settings, "admin", root=tmp_path)
+    guest = SessionContext.create(base_settings, "guest", root=tmp_path)
+
+    assert base_settings.rerank.enabled is True
+    assert admin.settings.rerank.enabled is True
+    assert admin.settings.rerank.backend == base_settings.rerank.backend
+    assert admin.settings.evaluation.enabled == base_settings.evaluation.enabled
+    assert guest.settings.rerank.enabled is False
+    assert guest.settings.evaluation.enabled is False
+
+
+def test_settings_to_raw_roundtrips_through_parser(base_settings, tmp_path) -> None:
+    from core import settings as core_settings
+    from observability.dashboard.services.session_context import settings_to_raw
+
+    session = SessionContext.create(base_settings, "admin", root=tmp_path)
+    parsed = core_settings._parse_settings(settings_to_raw(session.settings))
+    assert parsed == session.settings
+
+
+def test_apply_admin_session_settings_updates_rerank_and_keeps_session_paths(base_settings, tmp_path) -> None:
+    from observability.dashboard.services.session_context import apply_admin_session_settings, settings_to_raw
+
+    session = SessionContext.create(base_settings, "admin", root=tmp_path)
+    raw = settings_to_raw(session.settings)
+    raw["rerank"]["enabled"] = False
+    raw["rerank"]["backend"] = "none"
+    raw["retrieval"]["top_k_final"] = 7
+    raw["vector_store"]["persist_path"] = "data/db/chroma"
+
+    assert apply_admin_session_settings(session, raw) is None
+    assert session.settings.rerank.enabled is False
+    assert session.settings.retrieval.top_k_final == 7
+    assert session.settings.vector_store.persist_path == str(session.paths.chroma)
+    assert session.settings.vector_store.collection == SESSION_COLLECTION
+    assert str(session.paths.root) in session.settings.observability.trace_path
+
+
+def test_apply_admin_session_settings_rejects_invalid_and_keeps_old(base_settings, tmp_path) -> None:
+    from observability.dashboard.services.session_context import apply_admin_session_settings, settings_to_raw
+
+    session = SessionContext.create(base_settings, "admin", root=tmp_path)
+    before = session.settings
+    raw = settings_to_raw(session.settings)
+    raw["llm"]["model"] = ""
+
+    assert apply_admin_session_settings(session, raw) is not None
+    assert session.settings is before
+
+
+def test_apply_admin_session_settings_resets_workspace_on_embedding_change(base_settings, tmp_path) -> None:
+    from observability.dashboard.services.session_context import apply_admin_session_settings, settings_to_raw
+
+    session = SessionContext.create(base_settings, "admin", root=tmp_path)
+    session.paths.chroma.mkdir(parents=True, exist_ok=True)
+    marker = session.paths.chroma / "old_index.bin"
+    marker.write_text("stale")
+    raw = settings_to_raw(session.settings)
+    raw["embedding"]["model"] = "BAAI/bge-m3"
+    raw["embedding"]["dimensions"] = 1024
+
+    assert apply_admin_session_settings(session, raw) is None
+    assert session.settings.embedding.model == "BAAI/bge-m3"
+    assert not marker.exists()

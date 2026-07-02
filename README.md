@@ -71,6 +71,6 @@ OWNER_EMBEDDING_DIMENSIONS = "1024"
 ```
 
 3. Set a spending limit in your LLM provider's dashboard — the built-in owner quota (30 calls/hour, 200/day) resets when the process restarts.
-4. Guest visitors start a session and add their own LLM key on the Settings page (held in memory only); retrieval works without one.
+4. Guest visitors start a session and configure their own LLM, embedding model, and rerank options on the Settings page (held in memory only); retrieval works out of the box with the free local hash embedding.
 
 `.streamlit/secrets.toml` is git-ignored; never commit real credentials.

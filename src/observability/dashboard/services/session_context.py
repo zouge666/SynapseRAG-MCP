@@ -71,6 +71,49 @@ def is_safe_remote_url(url: str) -> bool:
         return True
 
 
+GUEST_EMBEDDING_LOCAL_LABEL = "local (free hash)"
+GUEST_EMBEDDING_OPENAI_LABEL = "openai-compatible"
+
+
+def apply_guest_embedding(session: "SessionContext", provider_label: str, model: str, base_url: str, api_key: str, dimensions: int) -> str | None:
+    if provider_label == GUEST_EMBEDDING_LOCAL_LABEL:
+        new_embedding = LOCAL_EMBEDDING
+    else:
+        if not model.strip():
+            return "Enter the embedding model name."
+        if not is_safe_remote_url(base_url):
+            return "Embedding base URL must be a public https address."
+        if not api_key.strip():
+            return "Enter your embedding API key, or switch back to local (free hash)."
+        if dimensions <= 0:
+            return "Dimensions must be a positive integer."
+        new_embedding = EmbeddingSettings(provider="openai", model=model.strip(), base_url=base_url.strip(), api_key=api_key.strip(), dimensions=dimensions)
+    current = session.settings.embedding
+    changed = (new_embedding.provider, new_embedding.model, new_embedding.dimensions) != (current.provider, current.model, current.dimensions)
+    session.settings = replace(session.settings, embedding=new_embedding)
+    if changed:
+        session.reset_workspace()
+    return None
+
+
+GUEST_RERANK_BACKENDS = ["none", "llm"]
+
+
+def apply_guest_rerank(session: "SessionContext", backend: str, top_m: int, top_k_final: int) -> str | None:
+    if backend not in GUEST_RERANK_BACKENDS:
+        return f"Unsupported rerank backend: {backend}"
+    if backend == "llm" and not session.settings.llm.api_key:
+        return "The llm rerank backend uses your session LLM key. Configure it in the Session LLM section first."
+    if top_k_final <= 0 or top_m <= 0:
+        return "Top K and Top M must be positive integers."
+    session.settings = replace(
+        session.settings,
+        rerank=replace(session.settings.rerank, enabled=backend != "none", backend=backend, top_m=int(top_m)),
+        retrieval=replace(session.settings.retrieval, top_k_final=int(top_k_final)),
+    )
+    return None
+
+
 class SessionError(RuntimeError):
     pass
 
@@ -129,7 +172,7 @@ class SessionContext:
             session_id=active_id,
             mode=mode,
             paths=paths,
-            settings=build_session_settings(base_settings, paths, llm, embedding),
+            settings=build_session_settings(base_settings, paths, llm, embedding, admin=mode == "admin"),
             created_at=now,
             expires_at=now + SESSION_TTL_SECONDS,
             clock=clock,
@@ -176,27 +219,134 @@ class SessionContext:
         (self.paths.root / SESSION_MARKER).write_text(json.dumps(marker), encoding="utf-8")
 
 
-def build_session_settings(base: Settings, paths: SessionPaths, llm: LLMSettings | None, embedding: EmbeddingSettings | None = None) -> Settings:
+def build_session_settings(base: Settings, paths: SessionPaths, llm: LLMSettings | None, embedding: EmbeddingSettings | None = None, admin: bool = False) -> Settings:
     active_llm = llm or LLMSettings(provider="none", model="none")
-    session_ingestion = replace(
-        base.ingestion,
-        bm25_path=str(paths.bm25),
-        image_root=str(paths.images),
-        image_db_path=str(paths.image_db),
-        integrity_db_path=str(paths.integrity_db),
-        chunk_refiner=replace(base.ingestion.chunk_refiner, use_llm=False),
-        metadata_enricher=replace(base.ingestion.metadata_enricher, use_llm=False),
-        image_captioner=replace(base.ingestion.image_captioner, enabled=False),
-    )
+    if admin:
+        session_ingestion = replace(
+            base.ingestion,
+            bm25_path=str(paths.bm25),
+            image_root=str(paths.images),
+            image_db_path=str(paths.image_db),
+            integrity_db_path=str(paths.integrity_db),
+        )
+        rerank = base.rerank
+        evaluation = base.evaluation
+    else:
+        session_ingestion = replace(
+            base.ingestion,
+            bm25_path=str(paths.bm25),
+            image_root=str(paths.images),
+            image_db_path=str(paths.image_db),
+            integrity_db_path=str(paths.integrity_db),
+            chunk_refiner=replace(base.ingestion.chunk_refiner, use_llm=False),
+            metadata_enricher=replace(base.ingestion.metadata_enricher, use_llm=False),
+            image_captioner=replace(base.ingestion.image_captioner, enabled=False),
+        )
+        rerank = replace(base.rerank, enabled=False, backend="none")
+        evaluation = replace(base.evaluation, enabled=False)
     return replace(
         base,
         llm=active_llm,
         embedding=embedding or LOCAL_EMBEDDING,
         vector_store=replace(base.vector_store, persist_path=str(paths.chroma), collection=SESSION_COLLECTION),
         ingestion=session_ingestion,
-        rerank=replace(base.rerank, enabled=False, backend="none"),
-        evaluation=replace(base.evaluation, enabled=False),
+        rerank=rerank,
+        evaluation=evaluation,
         observability=replace(base.observability, log_path=str(paths.logs / "app.log"), trace_path=str(paths.trace)),
+    )
+
+
+def settings_to_raw(settings: Settings) -> dict[str, Any]:
+    raw: dict[str, Any] = {
+        "app": {"name": settings.app.name, "environment": settings.app.environment},
+        "llm": {
+            "provider": settings.llm.provider,
+            "model": settings.llm.model,
+            "api_key": settings.llm.api_key,
+            "base_url": settings.llm.base_url,
+            "max_image_size": settings.llm.max_image_size,
+        },
+        "embedding": {
+            "provider": settings.embedding.provider,
+            "model": settings.embedding.model,
+            "dimensions": settings.embedding.dimensions,
+            "api_key": settings.embedding.api_key,
+            "base_url": settings.embedding.base_url,
+        },
+        "vector_store": {
+            "backend": settings.vector_store.backend,
+            "persist_path": settings.vector_store.persist_path,
+            "collection": settings.vector_store.collection,
+        },
+        "splitter": {
+            "provider": settings.splitter.provider,
+            "chunk_size": settings.splitter.chunk_size,
+            "chunk_overlap": settings.splitter.chunk_overlap,
+        },
+        "ingestion": {
+            "chunk_refiner": {"use_llm": settings.ingestion.chunk_refiner.use_llm, "prompt_path": settings.ingestion.chunk_refiner.prompt_path},
+            "metadata_enricher": {"use_llm": settings.ingestion.metadata_enricher.use_llm},
+            "image_captioner": {"enabled": settings.ingestion.image_captioner.enabled, "prompt_path": settings.ingestion.image_captioner.prompt_path},
+            "bm25_path": settings.ingestion.bm25_path,
+            "image_root": settings.ingestion.image_root,
+            "image_db_path": settings.ingestion.image_db_path,
+            "integrity_db_path": settings.ingestion.integrity_db_path,
+        },
+        "retrieval": {
+            "sparse_backend": settings.retrieval.sparse_backend,
+            "fusion_algorithm": settings.retrieval.fusion_algorithm,
+            "top_k_dense": settings.retrieval.top_k_dense,
+            "top_k_sparse": settings.retrieval.top_k_sparse,
+            "top_k_final": settings.retrieval.top_k_final,
+        },
+        "rerank": {
+            "enabled": settings.rerank.enabled,
+            "backend": settings.rerank.backend,
+            "model": settings.rerank.model,
+            "top_m": settings.rerank.top_m,
+        },
+        "evaluation": {"enabled": settings.evaluation.enabled, "backends": list(settings.evaluation.backends)},
+        "observability": {"log_path": settings.observability.log_path, "trace_path": settings.observability.trace_path},
+    }
+    if settings.vision_llm is not None:
+        raw["vision_llm"] = {
+            "provider": settings.vision_llm.provider,
+            "model": settings.vision_llm.model,
+            "api_key": settings.vision_llm.api_key,
+            "base_url": settings.vision_llm.base_url,
+            "max_image_size": settings.vision_llm.max_image_size,
+        }
+    return raw
+
+
+def apply_admin_session_settings(session: "SessionContext", raw: dict[str, Any]) -> str | None:
+    from core import settings as core_settings
+
+    try:
+        parsed = core_settings._parse_settings(raw)
+        validate_settings(parsed)
+    except SettingsError as error:
+        return str(error)
+    embedding = session.settings.embedding
+    embedding_changed = (parsed.embedding.provider, parsed.embedding.model, parsed.embedding.dimensions) != (embedding.provider, embedding.model, embedding.dimensions)
+    session.settings = _isolate_session_paths(parsed, session.paths)
+    if embedding_changed:
+        session.reset_workspace()
+    return None
+
+
+def _isolate_session_paths(settings: Settings, paths: SessionPaths) -> Settings:
+    return replace(
+        settings,
+        vector_store=replace(settings.vector_store, persist_path=str(paths.chroma), collection=SESSION_COLLECTION),
+        ingestion=replace(
+            settings.ingestion,
+            bm25_path=str(paths.bm25),
+            image_root=str(paths.images),
+            image_db_path=str(paths.image_db),
+            integrity_db_path=str(paths.integrity_db),
+        ),
+        observability=replace(settings.observability, log_path=str(paths.logs / "app.log"), trace_path=str(paths.trace)),
     )
 
 

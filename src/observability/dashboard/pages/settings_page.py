@@ -35,6 +35,7 @@ def render() -> None:
     from observability.dashboard import runtime
 
     st.title("Settings")
+    service: ConfigService | None = None
     if runtime.is_public():
         settings = runtime.require_settings(st)
         if settings is None:
@@ -42,18 +43,19 @@ def render() -> None:
         if not runtime.admin_view():
             _render_public(st, settings)
             return
-    service = ConfigService()
-    try:
-        raw = service.load_raw()
-        if runtime.is_public():
-            from observability.dashboard.services.session_context import load_public_base_settings
+        from observability.dashboard.services.session_context import settings_to_raw
 
-            settings = load_public_base_settings()
-        else:
+        session = runtime.current_session(st)
+        st.caption("Admin session — changes apply to this session only; redeploys and session expiry reset them. Storage paths stay managed per session.")
+        raw = settings_to_raw(session.settings)
+    else:
+        service = ConfigService()
+        try:
+            raw = service.load_raw()
             settings = service.load()
-    except Exception as error:
-        st.error(f"Failed to load settings: {error}")
-        return
+        except Exception as error:
+            st.error(f"Failed to load settings: {error}")
+            return
 
     values: dict[str, Any] = {
         "_effective": {
@@ -73,7 +75,8 @@ def render() -> None:
     _render_splitter_section(st, service, raw, values)
     _render_retrieval_section(st, service, raw, values)
     _render_rerank_section(st, service, raw, values, llm_ready)
-    _render_storage_section(st, service, raw, values)
+    if service is not None:
+        _render_storage_section(st, service, raw, values)
 
 
 def _render_public(st: Any, settings: Any) -> None:
@@ -83,6 +86,8 @@ def _render_public(st: Any, settings: Any) -> None:
     session = runtime.current_session(st)
     if session is not None and session.mode == "guest":
         _render_guest_llm_editor(st, session)
+        _render_guest_embedding_editor(st, session)
+        _render_guest_retrieval_editor(st, session)
     rows = []
     for component in runtime.mask_obj(ConfigService().component_dicts(settings)):
         rows.append({"Component": component["name"], "Provider": component["provider"], "Detail": component["detail"], "Status": component["status"]})
@@ -119,7 +124,76 @@ def _render_guest_llm_editor(st: Any, session: Any) -> None:
             st.rerun()
 
 
-def _render_pipeline_section(st: Any, service: ConfigService, raw: dict[str, Any], values: dict[str, Any]) -> None:
+def _render_guest_embedding_editor(st: Any, session: Any) -> None:
+    from observability.dashboard.services.session_context import (
+        GUEST_EMBEDDING_LOCAL_LABEL,
+        GUEST_EMBEDDING_OPENAI_LABEL,
+        apply_guest_embedding,
+    )
+
+    embedding = session.settings.embedding
+    with st.container(border=True):
+        st.markdown("**Session Embedding**")
+        st.caption(
+            "Free local hashing works offline. For better semantic search, use an OpenAI-compatible endpoint with your own key "
+            "(e.g. SiliconFlow BAAI/bge-m3, free tier). Changing the embedding model clears your current session index — re-upload your PDF afterwards."
+        )
+        provider_label = st.selectbox(
+            "Embedding provider",
+            [GUEST_EMBEDDING_LOCAL_LABEL, GUEST_EMBEDDING_OPENAI_LABEL],
+            index=0 if embedding.provider == "local" else 1,
+            key="guest_emb_provider",
+        )
+        model = ""
+        base_url = ""
+        api_key = ""
+        dimensions = int(embedding.dimensions or 1024)
+        if provider_label == GUEST_EMBEDDING_OPENAI_LABEL:
+            model = st.text_input("Embedding model", value="" if embedding.provider == "local" else embedding.model, placeholder="BAAI/bge-m3", key="guest_emb_model")
+            base_url = st.text_input(
+                "Embedding base URL",
+                value="" if embedding.provider == "local" else embedding.base_url,
+                placeholder="https://api.siliconflow.cn/v1",
+                key="guest_emb_base_url",
+            )
+            api_key = st.text_input("Embedding API Key", type="password", placeholder="Paste your embedding API key", key="guest_emb_api_key")
+            dimensions = st.number_input("Embedding dimensions", min_value=1, value=dimensions, step=1, key="guest_emb_dimensions")
+        if st.button("Save embedding settings", key="guest_emb_save", type="primary"):
+            error = apply_guest_embedding(session, provider_label, model, base_url, api_key, int(dimensions))
+            if error:
+                st.error(error)
+                return
+            st.success("Embedding settings saved for this session.")
+            st.rerun()
+
+
+def _render_guest_retrieval_editor(st: Any, session: Any) -> None:
+    from observability.dashboard.services.session_context import GUEST_RERANK_BACKENDS, apply_guest_rerank
+
+    with st.container(border=True):
+        st.markdown("**Retrieval & Rerank**")
+        top_k = st.number_input("Top K (final results)", min_value=1, max_value=20, value=int(session.settings.retrieval.top_k_final), step=1, key="guest_top_k")
+        current_backend = session.settings.rerank.backend if session.settings.rerank.enabled else "none"
+        backend = st.selectbox(
+            "Rerank backend",
+            GUEST_RERANK_BACKENDS,
+            index=GUEST_RERANK_BACKENDS.index(current_backend) if current_backend in GUEST_RERANK_BACKENDS else 0,
+            key="guest_rerank_backend",
+        )
+        top_m = int(session.settings.rerank.top_m)
+        if backend == "llm":
+            st.caption("The llm rerank backend calls your session LLM on each query — it consumes your own key's quota.")
+            top_m = st.number_input("Rerank top M", min_value=5, max_value=50, value=top_m, step=5, key="guest_rerank_top_m")
+        if st.button("Save retrieval settings", key="guest_retrieval_save", type="primary"):
+            error = apply_guest_rerank(session, backend, int(top_m), int(top_k))
+            if error:
+                st.error(error)
+                return
+            st.success("Retrieval settings saved for this session.")
+            st.rerun()
+
+
+def _render_pipeline_section(st: Any, service: ConfigService | None, raw: dict[str, Any], values: dict[str, Any]) -> None:
     with st.container(border=True):
         _section_title(st, "Pipeline", extra_class="sr-section-title--pipeline")
         st.caption("The green option is active. Click another option to switch, then save this section.")
@@ -141,7 +215,7 @@ def _render_pipeline_section(st: Any, service: ConfigService, raw: dict[str, Any
             _save_section(st, service, "pipeline", values)
 
 
-def _render_llm_section(st: Any, service: ConfigService, raw: dict[str, Any], values: dict[str, Any]) -> None:
+def _render_llm_section(st: Any, service: ConfigService | None, raw: dict[str, Any], values: dict[str, Any]) -> None:
     with st.container(border=True):
         _section_title(st, "LLM")
         _saved_banner(st, "llm", "LLM settings saved.")
@@ -179,7 +253,7 @@ def _render_llm_section(st: Any, service: ConfigService, raw: dict[str, Any], va
             _save_section(st, service, "llm", values)
 
 
-def _render_embedding_section(st: Any, service: ConfigService, raw: dict[str, Any], values: dict[str, Any]) -> None:
+def _render_embedding_section(st: Any, service: ConfigService | None, raw: dict[str, Any], values: dict[str, Any]) -> None:
     with st.container(border=True):
         _section_title(st, "Embedding")
         st.caption("Separate from the LLM section: chat endpoints (OpenAI-compatible or Anthropic) do not necessarily serve embeddings, so the connection is configured here.")
@@ -202,7 +276,7 @@ def _render_embedding_section(st: Any, service: ConfigService, raw: dict[str, An
             _save_section(st, service, "embedding", values)
 
 
-def _render_ingestion_section(st: Any, service: ConfigService, raw: dict[str, Any], values: dict[str, Any], llm_ready: bool) -> None:
+def _render_ingestion_section(st: Any, service: ConfigService | None, raw: dict[str, Any], values: dict[str, Any], llm_ready: bool) -> None:
     with st.container(border=True):
         _section_title(st, "Ingestion LLM Assist")
         _saved_banner(st, "ingestion", "Ingestion settings saved.")
@@ -215,7 +289,7 @@ def _render_ingestion_section(st: Any, service: ConfigService, raw: dict[str, An
             _save_section(st, service, "ingestion", values)
 
 
-def _render_splitter_section(st: Any, service: ConfigService, raw: dict[str, Any], values: dict[str, Any]) -> None:
+def _render_splitter_section(st: Any, service: ConfigService | None, raw: dict[str, Any], values: dict[str, Any]) -> None:
     with st.container(border=True):
         _section_title(st, "Splitter")
         _saved_banner(st, "splitter", "Splitter settings saved.")
@@ -225,7 +299,7 @@ def _render_splitter_section(st: Any, service: ConfigService, raw: dict[str, Any
             _save_section(st, service, "splitter", values)
 
 
-def _render_retrieval_section(st: Any, service: ConfigService, raw: dict[str, Any], values: dict[str, Any]) -> None:
+def _render_retrieval_section(st: Any, service: ConfigService | None, raw: dict[str, Any], values: dict[str, Any]) -> None:
     with st.container(border=True):
         _section_title(st, "Retrieval")
         _saved_banner(st, "retrieval", "Retrieval settings saved.")
@@ -236,7 +310,7 @@ def _render_retrieval_section(st: Any, service: ConfigService, raw: dict[str, An
             _save_section(st, service, "retrieval", values)
 
 
-def _render_rerank_section(st: Any, service: ConfigService, raw: dict[str, Any], values: dict[str, Any], llm_ready: bool) -> None:
+def _render_rerank_section(st: Any, service: ConfigService | None, raw: dict[str, Any], values: dict[str, Any], llm_ready: bool) -> None:
     with st.container(border=True):
         _section_title(st, "Rerank")
         _saved_banner(st, "rerank", "Rerank settings saved.")
@@ -248,7 +322,7 @@ def _render_rerank_section(st: Any, service: ConfigService, raw: dict[str, Any],
             _save_section(st, service, "rerank", values)
 
 
-def _render_storage_section(st: Any, service: ConfigService, raw: dict[str, Any], values: dict[str, Any]) -> None:
+def _render_storage_section(st: Any, service: ConfigService | None, raw: dict[str, Any], values: dict[str, Any]) -> None:
     with st.container(border=True):
         _section_title(st, "Storage & Logs")
         _saved_banner(st, "storage", "Storage settings saved.")
@@ -260,12 +334,23 @@ def _render_storage_section(st: Any, service: ConfigService, raw: dict[str, Any]
             _save_section(st, service, "storage", values)
 
 
-def _save_section(st: Any, service: ConfigService, section: str, values: dict[str, Any]) -> None:
-    try:
-        service.save(_apply_section(service.load_raw(), section, values))
-    except Exception as error:
-        st.error(f"Failed to save settings: {error}")
-        return
+def _save_section(st: Any, service: ConfigService | None, section: str, values: dict[str, Any]) -> None:
+    from observability.dashboard import runtime
+
+    if runtime.is_public():
+        from observability.dashboard.services.session_context import apply_admin_session_settings, settings_to_raw
+
+        session = runtime.current_session(st)
+        error = apply_admin_session_settings(session, _apply_section(settings_to_raw(session.settings), section, values))
+        if error:
+            st.error(f"Failed to save settings: {error}")
+            return
+    else:
+        try:
+            service.save(_apply_section(service.load_raw(), section, values))
+        except Exception as error:
+            st.error(f"Failed to save settings: {error}")
+            return
     st.session_state[f"settings_saved_{section}"] = True
     st.session_state.pop("settings_llm_api_key", None)
     st.session_state.pop("settings_embedding_api_key", None)
