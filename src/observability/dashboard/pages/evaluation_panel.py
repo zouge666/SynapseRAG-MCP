@@ -4,8 +4,9 @@ from pathlib import Path
 from typing import Any
 
 from core.query_engine import HybridSearch
-from core.settings import EvaluationSettings, load_settings
+from core.settings import EvaluationSettings
 from libs.evaluator.evaluator_factory import EvaluatorFactory
+from observability.dashboard import runtime
 from observability.evaluation.eval_runner import EvalReport, EvalRunner
 
 
@@ -15,11 +16,15 @@ DEFAULT_TEST_SET = "tests/fixtures/golden_test_set.json"
 def render() -> None:
     import streamlit as st
 
+    from observability.dashboard import runtime
+
     st.title("Evaluation")
     try:
-        settings = load_settings("config/settings.yaml")
+        settings = runtime.require_settings(st)
     except Exception as error:
         st.error(f"Failed to load settings: {error}")
+        return
+    if settings is None:
         return
 
     configured_backends = _configured_backends(settings)
@@ -35,7 +40,7 @@ def render() -> None:
         try:
             report = run_dashboard_evaluation(settings, selected_backends, test_set_path, int(top_k))
         except Exception as error:
-            st.error(f"Evaluation failed: {error}")
+            st.error(runtime.mask(f"Evaluation failed: {error}"))
             return
         _render_report(st, report)
         return
@@ -72,7 +77,7 @@ def _render_report(st: Any, report: EvalReport) -> None:
         st.subheader("Query Details")
         st.dataframe(rows, hide_index=True, use_container_width=True)
 
-    st.json(report.to_dict(), expanded=False)
+    st.json(runtime.mask_obj(report.to_dict()), expanded=False)
 
 
 def _configured_backends(settings: Any) -> list[str]:

@@ -6,7 +6,6 @@ from time import perf_counter
 from typing import Any, Callable
 
 from core.response import AnswerGenerator, AnswerGeneratorError, Citation
-from core.settings import load_settings
 from core.trace import TraceContext
 from libs.llm.llm_factory import LLMFactory
 from observability.dashboard.pages.query_console import _dimension_warning, _retrieve, _trace_path
@@ -170,13 +169,19 @@ def _chat_reply(settings, history, message, trace, llm, note: str | None = None)
 def render() -> None:
     import streamlit as st
 
+    from observability.dashboard import runtime
+
     st.title("LLM Chat")
     try:
-        settings = load_settings("config/settings.yaml")
+        settings = runtime.require_settings(st)
+        if settings is None:
+            return
         service = DataService(settings)
         collections = service.list_collections()
     except Exception as error:
         st.error(f"Failed to load chat service: {error}")
+        return
+    if runtime.llm_missing_notice(st, settings):
         return
 
     collection = st.selectbox("Collection", collections)
@@ -211,13 +216,16 @@ def render() -> None:
         st.markdown(prompt)
 
     with st.chat_message("assistant"):
+        if not runtime.owner_llm_quota_ok(st):
+            st.error("The server's shared LLM quota is exhausted (30/hour, 200/day). Please try again later.")
+            return
         with st.spinner("Thinking..."):
             try:
                 turn = run_chat_turn(settings, _llm_history(history[:-1]), prompt, collection, mode)
             except Exception as error:
                 turn = ChatTurn(message=prompt, route=mode if mode != "auto" else "rag", error=str(error))
         if turn.error:
-            st.error(turn.error)
+            st.error(runtime.mask(turn.error))
         else:
             st.markdown(turn.answer)
         _render_turn_meta(st, _turn_meta(turn))
@@ -230,13 +238,15 @@ def _llm_history(history: list[dict[str, Any]]) -> list[dict[str, str]]:
 
 
 def _turn_meta(turn: ChatTurn) -> dict[str, Any]:
+    from observability.dashboard import runtime
+
     return {
         "route": turn.route,
         "provider": turn.provider,
         "model": turn.model,
         "note": turn.note,
-        "error": turn.error,
-        "citations": list(dict.fromkeys(f"[{citation.id}] {citation.source}" for citation in turn.citations)),
+        "error": runtime.mask(turn.error) if turn.error else None,
+        "citations": list(dict.fromkeys(runtime.mask(f"[{citation.id}] {citation.source}") for citation in turn.citations)),
     }
 
 

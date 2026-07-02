@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+from observability.dashboard import runtime
 from observability.dashboard.services.data_service import DataService, image_exists
 
 
@@ -7,7 +8,10 @@ def render() -> None:
     import streamlit as st
 
     st.title("Data Browser")
-    service = DataService()
+    settings = runtime.require_settings(st)
+    if settings is None:
+        return
+    service = DataService(settings)
     collections = service.list_collections()
     with st.container(border=True):
         st.markdown("**Browse filters**")
@@ -30,14 +34,14 @@ def render() -> None:
     left.metric("Chunks", document["chunk_count"])
     middle.metric("Images", document["image_count"])
     right.metric("Collection", document["collection"])
-    st.subheader(document["source_path"])
-    st.json(document["metadata"], expanded=False)
+    st.subheader(runtime.mask(document["source_path"]))
+    st.json(runtime.mask_obj(document["metadata"]), expanded=False)
 
     st.subheader("Chunks")
     for chunk in chunks:
         with st.expander(_chunk_label(chunk)):
             st.write(chunk["text"])
-            st.json(chunk["metadata"], expanded=False)
+            st.json(runtime.mask_obj(chunk["metadata"]), expanded=False)
             chunk_images = _chunk_images(chunk, images)
             if chunk_images:
                 _render_images(st, chunk_images)
@@ -50,7 +54,7 @@ def render() -> None:
 def _document_rows(documents: list[dict]) -> list[dict]:
     return [
         {
-            "source_path": document["source_path"],
+            "source_path": runtime.mask(document["source_path"]),
             "collection": document["collection"],
             "chunks": document["chunk_count"],
             "images": document["image_count"],
@@ -61,7 +65,7 @@ def _document_rows(documents: list[dict]) -> list[dict]:
 
 
 def _document_label(document: dict) -> str:
-    return f"{document['source_path']} ({document['chunk_count']} chunks)"
+    return f"{runtime.mask(document['source_path'])} ({document['chunk_count']} chunks)"
 
 
 def _chunk_label(chunk: dict) -> str:
@@ -84,4 +88,4 @@ def _render_images(st: object, images: list[dict]) -> None:
         if image_exists(image):
             st.image(path, caption=image.get("image_id"))
         else:
-            st.write({"image_id": image.get("image_id"), "file_path": path})
+            st.write({"image_id": image.get("image_id"), "file_path": runtime.mask(path)})

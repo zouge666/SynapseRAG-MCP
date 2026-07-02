@@ -3,6 +3,7 @@ from __future__ import annotations
 import functools
 
 from observability.dashboard.pages import data_browser, evaluation_panel, ingestion_manager, ingestion_traces, llm_chat, overview, query_console, query_traces, settings_page
+from observability.dashboard.public_pages import session_page, start_page
 
 
 def _apply_app_styles(st) -> None:
@@ -277,9 +278,19 @@ def _with_sidebar_auto_expand(render_fn):
 def main() -> None:
     import streamlit as st
 
+    from observability.dashboard import runtime
+
     st.set_page_config(page_title="SynapseRAG MCP", page_icon="SR", layout="wide")
     _apply_app_styles(st)
-    pages = [
+    if runtime.is_public():
+        runtime.start_public_housekeeping()
+    pages = _local_pages(st) if not runtime.is_public() else _public_pages(st)
+    navigation = st.navigation(pages)
+    navigation.run()
+
+
+def _local_pages(st) -> list:
+    return [
         st.Page(overview.render, title="System Overview", icon=":material/dashboard:", url_path="", default=True),
         st.Page(overview.render, title="System Overview", icon=":material/dashboard:", url_path="overview", visibility="hidden"),
         st.Page(
@@ -316,8 +327,47 @@ def main() -> None:
         ),
         st.Page(settings_page.render, title="Settings", icon=":material/settings:", url_path="settings"),
     ]
-    navigation = st.navigation(pages)
-    navigation.run()
+
+
+def _public_pages(st) -> list:
+    return [
+        st.Page(start_page.render, title="Start", icon=":material/login:", url_path="", default=True),
+        st.Page(overview.render, title="System Overview", icon=":material/dashboard:", url_path="overview"),
+        st.Page(
+            _with_sidebar_auto_expand(data_browser.render),
+            title="Data Browser",
+            icon=":material/folder_open:",
+            url_path="data-browser",
+        ),
+        st.Page(
+            ingestion_manager.render,
+            title="Ingestion Manager",
+            icon=":material/upload_file:",
+            url_path="ingestion-manager",
+        ),
+        st.Page(query_console.render, title="Query", icon=":material/question_answer:", url_path="query"),
+        st.Page(llm_chat.render, title="LLM", icon=":material/chat:", url_path="llm"),
+        st.Page(
+            _with_sidebar_auto_expand(ingestion_traces.render),
+            title="Ingestion Traces",
+            icon=":material/timeline:",
+            url_path="ingestion-traces",
+        ),
+        st.Page(
+            _with_sidebar_auto_expand(query_traces.render),
+            title="Query Traces",
+            icon=":material/search:",
+            url_path="query-traces",
+        ),
+        st.Page(
+            _with_sidebar_auto_expand(evaluation_panel.render),
+            title="Evaluation",
+            icon=":material/analytics:",
+            url_path="evaluation",
+        ),
+        st.Page(session_page.render, title="Session", icon=":material/hourglass_empty:", url_path="session"),
+        st.Page(settings_page.render, title="Settings", icon=":material/settings:", url_path="settings"),
+    ]
 
 
 if __name__ == "__main__":

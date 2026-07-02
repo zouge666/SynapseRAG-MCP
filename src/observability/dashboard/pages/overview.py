@@ -10,11 +10,15 @@ from observability.dashboard.services.config_service import ConfigService
 def render() -> None:
     import streamlit as st
 
+    from observability.dashboard import runtime
+
     service = ConfigService()
     try:
-        settings = service.load()
+        settings = runtime.require_settings(st)
     except Exception as error:
         st.error(f"Failed to load settings: {error}")
+        return
+    if settings is None:
         return
 
     st.title("SynapseRAG MCP")
@@ -25,7 +29,7 @@ def render() -> None:
     right.metric("Collection", settings.vector_store.collection)
 
     st.subheader("Components")
-    components = service.component_dicts(settings)
+    components = [runtime.mask_obj(component) for component in service.component_dicts(settings)]
     for start in range(0, len(components), 4):
         columns = st.columns(4)
         for column, component in zip(columns, components[start : start + 4]):
@@ -39,7 +43,7 @@ def render() -> None:
     metric_columns[1].metric("Documents", stats.get("document_count", 0))
     metric_columns[2].metric("Sources", stats.get("source_count", 0))
     metric_columns[3].metric("Persisted", "yes" if stats.get("persisted") else "no")
-    st.json(stats, expanded=False)
+    st.json(runtime.mask_obj(stats), expanded=False)
 
 
 def _component_card(component: dict[str, Any]) -> str:

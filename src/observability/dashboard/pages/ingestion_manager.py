@@ -6,7 +6,9 @@ from pathlib import Path
 from typing import Any, Callable
 
 from ingestion import IngestionPipeline
+from observability.dashboard import runtime
 from observability.dashboard.services.data_service import DataService
+from observability.dashboard.services.session_context import SESSION_COLLECTION
 from observability.logger import write_trace
 
 
@@ -16,6 +18,12 @@ COLLECTION_NAME = re.compile(r"^[A-Za-z0-9][A-Za-z0-9_.-]{0,63}$")
 
 def render() -> None:
     import streamlit as st
+
+    from observability.dashboard import runtime
+
+    if runtime.is_public():
+        _render_public(st)
+        return
 
     st.title("Ingestion Manager")
     service = DataService()
@@ -85,6 +93,36 @@ def render() -> None:
         if right.button("Delete", key=f"delete-{document['source_path']}"):
             result = _delete_document(service, document["source_path"], collection)
             st.toast(f"Deleted {result['source_path']}")
+            st.rerun()
+
+
+def _render_public(st: Any) -> None:
+    from observability.dashboard.public_pages.upload_page import process_upload
+
+    st.title("Ingestion Manager")
+    settings = runtime.require_settings(st)
+    if settings is None:
+        return
+    session = runtime.current_session(st)
+    st.caption(f"Session expires in {session.remaining_seconds() // 60} min. One PDF per session: a new upload replaces the previous document.")
+
+    uploaded = st.file_uploader("PDF file (max 10 MB, 100 pages)", type=["pdf"])
+    if uploaded is not None and st.button("Ingest", type="primary"):
+        process_upload(st, session, uploaded)
+
+    service = DataService(settings)
+    documents = service.list_documents(SESSION_COLLECTION)
+    st.subheader("Documents")
+    if not documents:
+        st.info("No ingested documents found.")
+        return
+    st.dataframe(_document_rows(documents), hide_index=True, use_container_width=True)
+    for document in documents:
+        left, right = st.columns([5, 1])
+        left.write(runtime.mask(document["source_path"]))
+        if right.button("Delete", key=f"delete-{document['source_path']}"):
+            result = _delete_document(service, document["source_path"], SESSION_COLLECTION)
+            st.toast(f"Deleted {runtime.mask(result['source_path'])}")
             st.rerun()
 
 
@@ -158,7 +196,7 @@ def _delete_document(service: DataService, source_path: str, collection: str) ->
 def _document_rows(documents: list[dict[str, Any]]) -> list[dict[str, Any]]:
     return [
         {
-            "source_path": document["source_path"],
+            "source_path": runtime.mask(document["source_path"]),
             "collection": document["collection"],
             "chunks": document["chunk_count"],
             "images": document["image_count"],

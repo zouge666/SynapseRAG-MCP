@@ -9,8 +9,13 @@ from observability.dashboard.services.trace_service import TraceService
 def render() -> None:
     import streamlit as st
 
+    from observability.dashboard import runtime
+
     st.title("Query Traces")
-    service = TraceService()
+    settings = runtime.require_settings(st)
+    if settings is None:
+        return
+    service = TraceService(settings.observability.trace_path)
     with st.container(border=True):
         st.markdown("**Trace filters**")
         pending = st.session_state.get("query_traces_search")
@@ -43,7 +48,7 @@ def render() -> None:
     left.metric("Status", summary.status)
     middle.metric("Elapsed ms", summary.total_elapsed_ms)
     right.metric("Stages", len(trace.get("stages", [])))
-    st.json(summary.metadata, expanded=False)
+    st.json(runtime.mask_obj(summary.metadata), expanded=False)
 
     waterfall_rows = service.query_waterfall_rows(trace)
     if waterfall_rows:
@@ -62,14 +67,14 @@ def render() -> None:
         for row in rerank_rows:
             with st.expander(row["stage"]):
                 st.metric("Elapsed ms", row["elapsed_ms"])
-                st.json(row["details"], expanded=False)
+                st.json(runtime.mask_obj(row["details"]), expanded=False)
 
     st.subheader("Stage Details")
     for row in service.stage_rows(trace):
         with st.expander(row["stage"]):
             st.metric("Elapsed ms", row["elapsed_ms"])
             st.write(row["method"])
-            st.json(row["details"], expanded=False)
+            st.json(runtime.mask_obj(row["details"]), expanded=False)
 
 
 def _trace_rows(traces: list[dict]) -> list[dict]:

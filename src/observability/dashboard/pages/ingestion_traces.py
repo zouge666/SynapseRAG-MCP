@@ -9,8 +9,13 @@ from observability.dashboard.services.trace_service import TraceService
 def render() -> None:
     import streamlit as st
 
+    from observability.dashboard import runtime
+
     st.title("Ingestion Traces")
-    service = TraceService()
+    settings = runtime.require_settings(st)
+    if settings is None:
+        return
+    service = TraceService(settings.observability.trace_path)
     if not service.ingestion_traces():
         st.info("No ingestion traces found.")
         return
@@ -45,7 +50,7 @@ def render() -> None:
     left.metric("Status", summary.status)
     middle.metric("Elapsed ms", summary.total_elapsed_ms)
     right.metric("Stages", len(trace.get("stages", [])))
-    st.json(summary.metadata, expanded=False)
+    st.json(runtime.mask_obj(summary.metadata), expanded=False)
 
     waterfall_rows = service.ingestion_waterfall_rows(trace)
     if waterfall_rows:
@@ -58,15 +63,17 @@ def render() -> None:
         with st.expander(row["stage"]):
             st.metric("Elapsed ms", row["elapsed_ms"])
             st.write(row["method"])
-            st.json(row["details"], expanded=False)
+            st.json(runtime.mask_obj(row["details"]), expanded=False)
 
 
 def _trace_rows(traces: list[dict]) -> list[dict]:
+    from observability.dashboard import runtime
+
     return [
         {
             "trace_id": trace.get("trace_id", ""),
             "status": trace.get("status", ""),
-            "source_path": trace.get("metadata", {}).get("source_path", "") if isinstance(trace.get("metadata"), dict) else "",
+            "source_path": runtime.mask(trace.get("metadata", {}).get("source_path", "")) if isinstance(trace.get("metadata"), dict) else "",
             "collection": trace.get("metadata", {}).get("collection", "") if isinstance(trace.get("metadata"), dict) else "",
             "started_at": trace.get("started_at", ""),
             "finished_at": trace.get("finished_at", ""),
@@ -77,9 +84,11 @@ def _trace_rows(traces: list[dict]) -> list[dict]:
 
 
 def _trace_label(trace: dict) -> str:
+    from observability.dashboard import runtime
+
     metadata = trace.get("metadata", {}) if isinstance(trace.get("metadata"), dict) else {}
     source = metadata.get("source_path") or trace.get("trace_id", "")
-    return f"{source} {trace.get('status', '')}".strip()
+    return f"{runtime.mask(source)} {trace.get('status', '')}".strip()
 
 
 def _stage_rows(rows: list[dict]) -> list[dict]:

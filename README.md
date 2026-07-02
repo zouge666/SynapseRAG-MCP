@@ -8,6 +8,8 @@ pip install -r requirements.txt
 
 ## Start the Dashboard
 
+Local mode — full dashboard, reads `config/settings.yaml`, no masking:
+
 ```bash
 python scripts/start_dashboard.py
 ```
@@ -41,3 +43,34 @@ python scripts/evaluate.py
 pytest
 pytest -m unit
 ```
+
+## Deployment (Streamlit Community Cloud)
+
+Public mode serves the same dashboard with additional Start (sign-in) and Session pages: per-browser-session workspace isolation, a one-hour data TTL, and masking of local paths and secrets for guest visitors (administrators see unmasked data).
+
+```bash
+streamlit run streamlit_app.py
+```
+
+1. Push this repository to GitHub and create an app on share.streamlit.io with entrypoint `streamlit_app.py`.
+2. Configure the app's Settings → Secrets:
+
+```toml
+ADMIN_PASSWORD = "change-me-to-a-long-random-string"
+OWNER_LLM_PROVIDER = "openai"
+OWNER_LLM_MODEL = "example-model-name"
+OWNER_LLM_BASE_URL = "https://api.example-llm.com/v1"
+OWNER_LLM_API_KEY = "sk-example-fake-key-000000"
+
+# Optional: real embedding model for admin sessions (guests always use free local hashing)
+OWNER_EMBEDDING_PROVIDER = "openai"
+OWNER_EMBEDDING_MODEL = "BAAI/bge-m3"
+OWNER_EMBEDDING_BASE_URL = "https://api.siliconflow.cn/v1"
+OWNER_EMBEDDING_API_KEY = "sk-example-fake-key-000000"
+OWNER_EMBEDDING_DIMENSIONS = "1024"
+```
+
+3. Set a spending limit in your LLM provider's dashboard — the built-in owner quota (30 calls/hour, 200/day) resets when the process restarts.
+4. Guest visitors start a session and add their own LLM key on the Settings page (held in memory only); retrieval works without one.
+
+`.streamlit/secrets.toml` is git-ignored; never commit real credentials.

@@ -32,7 +32,16 @@ KEY_MASK = "••••••••"
 def render() -> None:
     import streamlit as st
 
+    from observability.dashboard import runtime
+
     st.title("Settings")
+    if runtime.is_public():
+        settings = runtime.require_settings(st)
+        if settings is None:
+            return
+        if not runtime.admin_view():
+            _render_public(st, settings)
+            return
     service = ConfigService()
     try:
         raw = service.load_raw()
@@ -60,6 +69,49 @@ def render() -> None:
     _render_retrieval_section(st, service, raw, values)
     _render_rerank_section(st, service, raw, values, llm_ready)
     _render_storage_section(st, service, raw, values)
+
+
+def _render_public(st: Any, settings: Any) -> None:
+    from observability.dashboard import runtime
+
+    st.caption("LLM and storage are scoped to your session; secrets are never shown.")
+    session = runtime.current_session(st)
+    if session is not None and session.mode == "guest":
+        _render_guest_llm_editor(st, session)
+    rows = []
+    for component in runtime.mask_obj(ConfigService().component_dicts(settings)):
+        rows.append({"Component": component["name"], "Provider": component["provider"], "Detail": component["detail"], "Status": component["status"]})
+    st.dataframe(rows, hide_index=True, use_container_width=True)
+    st.write(f"LLM key: **{'configured (hidden)' if settings.llm.api_key else 'not configured — local search only'}**")
+
+
+def _render_guest_llm_editor(st: Any, session: Any) -> None:
+    import dataclasses
+
+    from core.settings import LLMSettings
+    from observability.dashboard.services.session_context import is_safe_remote_url
+
+    llm = session.settings.llm
+    with st.container(border=True):
+        st.markdown("**Session LLM**")
+        st.caption("Bring your own key — it is held in memory only and deleted with your session. DeepSeek example: provider openai, base URL https://api.deepseek.com/v1")
+        provider = st.selectbox("Provider", LLM_PROVIDERS, index=LLM_PROVIDERS.index(llm.provider) if llm.provider in LLM_PROVIDERS else 0, key="guest_llm_provider")
+        model = st.text_input("Model", value=llm.model or "", key="guest_llm_model")
+        base_url = st.text_input("Base URL", value=llm.base_url or DEFAULT_BASE_URLS.get(provider, ""), key="guest_llm_base_url")
+        api_key = st.text_input("API Key", type="password", placeholder="Paste your API key", key="guest_llm_api_key")
+        if st.button("Save LLM settings", key="guest_llm_save", type="primary"):
+            if not api_key.strip():
+                st.warning("Enter your API key to enable LLM answers.")
+                return
+            if not is_safe_remote_url(base_url):
+                st.error("Base URL must be a public https address.")
+                return
+            session.settings = dataclasses.replace(
+                session.settings,
+                llm=LLMSettings(provider=provider, model=model.strip(), base_url=base_url.strip(), api_key=api_key.strip()),
+            )
+            st.success("LLM configured for this session.")
+            st.rerun()
 
 
 def _render_pipeline_section(st: Any, service: ConfigService, raw: dict[str, Any], values: dict[str, Any]) -> None:

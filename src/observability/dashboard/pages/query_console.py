@@ -6,7 +6,6 @@ from typing import Any, Callable
 from core import RetrievalResult
 from core.query_engine import HybridSearch, Reranker
 from core.response import AnswerGenerator, AnswerGeneratorError, GeneratedAnswer
-from core.settings import load_settings
 from core.trace import TraceContext
 from observability.dashboard.services.data_service import DataService
 from observability.logger import write_trace
@@ -29,9 +28,13 @@ class DashboardQueryResult:
 def render() -> None:
     import streamlit as st
 
+    from observability.dashboard import runtime
+
     st.title("Knowledge Base Query")
     try:
-        settings = load_settings("config/settings.yaml")
+        settings = runtime.require_settings(st)
+        if settings is None:
+            return
         service = DataService(settings)
         collections = service.list_collections()
     except Exception as error:
@@ -54,14 +57,19 @@ def render() -> None:
         return
 
     spinner = "Searching and generating an answer..." if generate_answer else "Searching the knowledge base..."
+    if generate_answer and runtime.llm_missing_notice(st, settings):
+        return
     try:
         with st.spinner(spinner):
             if generate_answer:
+                if not runtime.owner_llm_quota_ok(st):
+                    st.error("The server's shared LLM quota is exhausted (30/hour, 200/day). Try again later or run retrieval only.")
+                    return
                 query_result = run_dashboard_answer(settings, question, collection, int(top_k))
             else:
                 query_result = run_dashboard_query(settings, question, collection, int(top_k))
     except Exception as error:
-        st.error(f"Query failed: {error}")
+        st.error(runtime.mask(f"Query failed: {error}"))
         return
 
     if not query_result.results:
@@ -86,7 +94,7 @@ def render() -> None:
     for index, result in enumerate(query_result.results, start=1):
         with st.expander(_result_label(index, result)):
             st.write(result.text)
-            st.json(result.metadata, expanded=False)
+            st.json(runtime.mask_obj(result.metadata), expanded=False)
 
 
 def _render_answer(st: Any, query_result: DashboardQueryResult) -> None:
@@ -231,11 +239,15 @@ def _trace_path(settings: Any) -> str:
 
 
 def _source_caption(result: RetrievalResult) -> str:
+    from observability.dashboard import runtime
+
     source = result.metadata.get("source_path") or result.metadata.get("source") or "unknown"
     chunk_index = result.metadata.get("chunk_index", "-")
-    return f"Source: {source} · Chunk: {chunk_index} · Score: {result.score:.4f}"
+    return f"Source: {runtime.mask(source)} · Chunk: {chunk_index} · Score: {result.score:.4f}"
 
 
 def _result_label(index: int, result: RetrievalResult) -> str:
+    from observability.dashboard import runtime
+
     source = result.metadata.get("source_path") or result.metadata.get("source") or "unknown"
-    return f"{index}. {source} · score={result.score:.4f}"
+    return f"{index}. {runtime.mask(source)} · score={result.score:.4f}"

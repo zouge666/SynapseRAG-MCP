@@ -130,6 +130,10 @@ class IngestionSettings:
     chunk_refiner: ChunkRefinerSettings = field(default_factory=ChunkRefinerSettings)
     metadata_enricher: MetadataEnricherSettings = field(default_factory=MetadataEnricherSettings)
     image_captioner: ImageCaptionerSettings = field(default_factory=ImageCaptionerSettings)
+    bm25_path: str = ""
+    image_root: str = ""
+    image_db_path: str = ""
+    integrity_db_path: str = ""
 
 
 @dataclass(frozen=True)
@@ -355,6 +359,10 @@ def _parse_ingestion_settings(section: dict[str, Any]) -> IngestionSettings:
             enabled=_boolean(image_captioner, "enabled", False),
             prompt_path=_text(image_captioner, "prompt_path", "config/prompts/image_captioning.txt"),
         ),
+        bm25_path=_text(section, "bm25_path", ""),
+        image_root=_text(section, "image_root", ""),
+        image_db_path=_text(section, "image_db_path", ""),
+        integrity_db_path=_text(section, "integrity_db_path", ""),
     )
 
 
