@@ -172,3 +172,12 @@ def test_llm_missing_notice_only_when_public_without_key(monkeypatch, base_setti
     assert st.warnings == []
     assert runtime.llm_missing_notice(st, SimpleNamespace(llm=SimpleNamespace(api_key=""))) is True
     assert any("Settings page" in warning for warning in st.warnings)
+
+
+def test_environment_label_cloud_only_when_public(monkeypatch) -> None:
+    monkeypatch.delenv(runtime.PUBLIC_ENV_VAR, raising=False)
+    assert runtime.environment_label("local") == "local"
+    assert runtime.environment_label("production") == "production"
+
+    monkeypatch.setenv(runtime.PUBLIC_ENV_VAR, "1")
+    assert runtime.environment_label("local") == "cloud"

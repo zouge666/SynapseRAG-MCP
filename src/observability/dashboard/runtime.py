@@ -33,6 +33,10 @@ def is_public() -> bool:
     return os.environ.get(PUBLIC_ENV_VAR) == "1"
 
 
+def environment_label(environment: str) -> str:
+    return "cloud" if is_public() else environment
+
+
 def current_session(st: Any) -> SessionContext | None:
     session = st.session_state.get("session_context")
     return session if isinstance(session, SessionContext) else None

@@ -1,5 +1,13 @@
 # SynapseRAG-MCP
 
+[English](README.md) | [中文](docs/README.zh-CN.md) | [Dansk](docs/README.da.md) | [Deutsch](docs/README.de.md)
+
+SynapseRAG-MCP is a modular Retrieval-Augmented Generation (RAG) system: every stage of the pipeline — document splitting, embedding, hybrid dense + sparse retrieval with RRF fusion, reranking, and answer generation — is a pluggable component with swappable providers. It ships with an MCP server so agents can query your knowledge base directly, and a Streamlit dashboard for ingestion, traces, evaluation, and live configuration. Run it fully locally, or deploy it publicly with per-session workspace isolation and a one-hour data TTL.
+
+**[Try the live demo →](https://synapserag-mcp-server.streamlit.app)**
+
+![SynapseRAG MCP dashboard](docs/screenshot.jpg)
+
 ## Install
 
 ```bash
@@ -74,3 +82,7 @@ OWNER_EMBEDDING_DIMENSIONS = "1024"
 4. Guest visitors start a session and configure their own LLM, embedding model, and rerank options on the Settings page (held in memory only); retrieval works out of the box with the free local hash embedding.
 
 `.streamlit/secrets.toml` is git-ignored; never commit real credentials.
+
+## License
+
+[GNU AGPL-3.0](LICENSE) © 2026 Theo Zou

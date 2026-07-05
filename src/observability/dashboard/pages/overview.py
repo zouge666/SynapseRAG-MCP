@@ -24,7 +24,7 @@ def render() -> None:
     st.title("SynapseRAG MCP")
     summary = service.app_summary(settings)
     left, middle, right = st.columns(3)
-    left.metric("Environment", summary["environment"])
+    left.metric("Environment", runtime.environment_label(summary["environment"]))
     middle.metric("Vector Backend", settings.vector_store.backend)
     right.metric("Collection", settings.vector_store.collection)
 
