@@ -50,18 +50,7 @@ def _apply_app_styles(st) -> None:
             display: none;
         }
 
-        [data-testid="stSidebar"] [data-testid="stSidebarContent"] {
-            display: flex;
-            flex-direction: column;
-            height: 100%;
-        }
-
-        [data-testid="stSidebar"] [data-testid="stSidebarUserContent"] {
-            order: 1;
-        }
-
         [data-testid="stSidebar"] [data-testid="stSidebarNav"] {
-            order: 2;
             flex: 1 1 auto;
             min-height: 0;
         }
@@ -95,7 +84,7 @@ def _apply_app_styles(st) -> None:
         }
 
         .sr-sidebar-credit {
-            padding: 0.1rem 0 0.7rem;
+            padding: 0.9rem 0 0.4rem;
             font-size: 0.95rem;
             line-height: 1;
         }
