@@ -1,0 +1,13 @@
+name: Keep live demo awake
+
+on:
+  schedule:
+    - cron: "23 1,9,17 * * *"
+  workflow_dispatch:
+
+jobs:
+  ping:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Ping live demo
+        run: curl -fsSL --max-redirs 50 --max-time 300 -c /tmp/st_cookies.txt -b /tmp/st_cookies.txt https://synapserag-mcp-server.streamlit.app > /dev/null
